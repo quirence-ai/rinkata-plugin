@@ -1,0 +1,17 @@
+{
+  "name": "rinkata",
+  "owner": {
+    "name": "Quirence",
+    "email": "bryan@quirence.ai"
+  },
+  "metadata": {
+    "description": "Hub-only source-of-truth consistency engine for AI-assisted product development. Hub owns Goals, specs, tickets, decisions, reconcile artifacts, and completion evidence; local files are cache/import-export surfaces only."
+  },
+  "plugins": [
+    {
+      "name": "rinkata",
+      "source": "./plugins/rinkata",
+      "description": "Hub-only source-of-truth consistency engine for AI-assisted product development. Hub owns Goals, specs, tickets, decisions, reconcile artifacts, and completion evidence; local files are cache/import-export surfaces only."
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "rinkata-ticket-complete",
+  "description": "Close a rinkata ticket with shipped evidence through rinkata_complete_ticket after preflight and context surfacing.",
+  "category": "skills",
+  "author": {
+    "name": "Quirence",
+    "github": "quirence-ai"
+  },
+  "version": "0.1.8",
+  "requires": {
+    "services": [],
+    "tools": [
+      "AI client with MCP support"
+    ],
+    "rinkata": true
+  },
+  "tags": [
+    "skill",
+    "ticket-complete",
+    "mutating"
+  ],
+  "difficulty": "beginner",
+  "estimated_time": "auto-loaded",
+  "created": "2026-05-15",
+  "updated": "2026-08-31"
+}

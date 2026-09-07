@@ -1,0 +1,30 @@
+{
+  "name": "rinkata",
+  "displayName": "Rinkata",
+  "version": "0.8.13",
+  "description": "Hub-only source-of-truth consistency engine for AI-assisted product development. Hub owns Goals, specs, tickets, decisions, reconcile artifacts, and completion evidence; local files are cache/import-export surfaces only.",
+  "author": {
+    "name": "Quirence",
+    "email": "bryan@quirence.ai"
+  },
+  "homepage": "https://rinkata.dev",
+  "repository": "https://github.com/quirence-ai/rinkata-plugin",
+  "license": "MIT",
+  "keywords": [
+    "rinkata",
+    "quirence",
+    "mcp",
+    "goals",
+    "specs",
+    "tickets"
+  ],
+  "category": "productivity",
+  "tags": [
+    "rinkata",
+    "mcp",
+    "source-of-truth"
+  ],
+  "skills": "./skills",
+  "mcpServers": "./mcp.json",
+  "logo": "assets/logo.svg"
+}

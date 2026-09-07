@@ -1,0 +1,26 @@
+{
+  "name": "rinkata-orient",
+  "description": "One-call orient for any rinkata project through Hub MCP — counts, drift, doctor verdict, suggested next action.",
+  "category": "skills",
+  "author": {
+    "name": "Quirence",
+    "github": "quirence-ai"
+  },
+  "version": "0.1.7",
+  "requires": {
+    "services": [],
+    "tools": [
+      "AI client with MCP support"
+    ],
+    "rinkata": true
+  },
+  "tags": [
+    "skill",
+    "orient",
+    "read-only"
+  ],
+  "difficulty": "beginner",
+  "estimated_time": "auto-loaded",
+  "created": "2026-05-14",
+  "updated": "2026-07-18"
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rinkata": {
+      "type": "http",
+      "url": "https://api.rinkata.dev/mcp"
+    }
+  }
+}
