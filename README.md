@@ -2,18 +2,22 @@
 
 Cursor plugin for [rinkata](https://rinkata.dev) by Quirence. Hub source-of-truth skills plus MCP.
 
-Version: `0.8.13`
+Version: `0.8.16`
 
 ## Install
 
-From the Cursor Marketplace once listed, or locally:
+From [cursor.directory](https://cursor.directory), or locally. Cursor rejects a
+symlink whose target is outside `~/.cursor/plugins/local`; copy the plugin
+directory:
 
 ```bash
 mkdir -p ~/.cursor/plugins/local
-ln -s "$(pwd)/plugins/rinkata" ~/.cursor/plugins/local/rinkata
+rm -rf ~/.cursor/plugins/local/rinkata
+cp -R "$(pwd)/plugins/rinkata" ~/.cursor/plugins/local/rinkata
 ```
 
-Then Developer: Reload Window.
+Then **Developer: Reload Window**. Open **Customize** (sidebar), not only
+the Marketplace Plugins list.
 
 Layout matches [cursor/plugin-template](https://github.com/cursor/plugin-template):
 

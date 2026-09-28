@@ -1,15 +1,7 @@
 ---
 name: rinkata-ops
-version: 0.1.47
-description: |
-  rinkata is a Hub source-of-truth consistency engine. Hub DB is canonical for
-  Goals, specs, tickets, decisions, reconcile artifacts, inbox notes, handoffs,
-  and completion evidence. Installed MCP tools, the CLI, and the Hub UI are the
-  access paths; repo-local artifact directories are not a rinkata surface.
-  Use this skill whenever the user mentions rinkata projects, tickets, preflight,
-  reconcile, drift, doctor, ticket IDs like TICK-*, Needs you, or Decisions.
-  Also load mid-session to mint a proposed Decision (judgment call / log a
-  decision) then list needs_action — do not wait for a slash command.
+version: 0.1.55
+description: 'rinkata is a Hub source-of-truth consistency engine. Hub DB is canonical for Goals, specs, tickets, decisions, reconcile artifacts, inbox notes, handoffs, and completion evidence. Installed MCP tools, the CLI, and the Hub UI are the access paths; repo-local artifact directories are not a rinkata surface. Use this skill whenever the user mentions rinkata projects, tickets, preflight, reconcile, drift, doctor, ticket IDs like TICK-*, Needs you, or Decisions. Also load mid-session to mint a proposed Decision (judgment call / log a decision) then list needs_action — do not wait for a slash command.'
 triggers:
   - rinkata
   - preflight
@@ -107,7 +99,7 @@ This skill guarantees:
 - `rinkata_status` is consulted before any work; preflight runs before tickets.
 - After a read of an idea, Goal, spec, or ticket, honor `nextHop` (`tool`, `mode`, `reason`) when present. Load the owning ceremony skill; do not invent a parallel write and do not auto-execute the hop. Write-time `nextAction` and `work_queue.claimAction` are unchanged.
 - Stale source hashes are blockers, never silently overwritten.
-- Reconcile plans are reviewable and human-approved before apply.
+- Reconcile plans are reviewable: agents propose, a human applies.
 - Protected human notes survive every reconcile.
 
 ## Official ceremonies
@@ -199,13 +191,13 @@ After orient, use kind-specific list tools (same filters as Hub Views; CLI: `rin
 
 - `rinkata_list_tickets({status, goalPath, assignee, limit})` — default `status="open"`; `assignee="me"`; `kind: "bugs"` for bugs only (`prdPath` deprecated).
 - `rinkata_list_goals({status, limit})` — default `status="all"`.
-- `rinkata_list_decisions({status, limit})` — use `status: "needs_action"` / `actionable` for Needs you (GOAL-67).
+- `rinkata_list_decisions({status, limit})` — use `status: "needs_action"` / `actionable` for Needs you.
 - `rinkata_list_specs({goal, status, includeArchived})` (`prd` deprecated alias for `goal`).
 - `rinkata_inbox_list({})`, `rinkata_list_handoffs({state, about, query, limit})`.
 - `rinkata_search({query, kinds?, statusByKind?, goal?, limit?, offset?})` — prefer before create.
 - `rinkata_knowledge_list({areaId?})` — customer-named areas + documents (`areaId: "unfiled"` for Unfiled). Then `rinkata_knowledge_read` / `rinkata_knowledge_ask`. Upload files with `rinkata_knowledge_upload` (not markdown notes — those stay `rinkata_knowledge_record`). Do not invent area names.
 
-**Bounded reads:** `rinkata_work_queue`, `rinkata_list_drift`, `rinkata_propose_reconcile`, and `rinkata_propose_staged_reconcile` return at most 25 items in `{ total, returned, offset, truncated }`. If `truncated: true`, page with `offset`/`limit` or filters — never infer "empty / no drift / nothing to reconcile" from one partial page. Staged apply requires a complete action list (`actions.length === summary.totalActions`); re-fetch before `rinkata_apply_staged_reconcile`.
+**Bounded reads:** `rinkata_work_queue`, `rinkata_list_drift`, `rinkata_propose_reconcile`, and `rinkata_propose_staged_reconcile` return at most 25 items in `{ total, returned, offset, truncated }`. If `truncated: true`, page with `offset`/`limit` or filters — never infer "empty / no drift / nothing to reconcile" from one partial page. Staged apply requires a complete action list (`actions.length === summary.totalActions`); re-fetch before handing the plan to a human to apply.
 
 ### Phase 2 — Preflight (before starting or completing a ticket)
 
@@ -254,6 +246,8 @@ Agents already own readiness visibility:
 | Blast radius if Goal/Spec/Ticket moves | `rinkata_impact` (CLI `rinkata impact`) — read-only multi-hop |
 | Cycle / missing-referent / inverse edges | `rinkata_doctor` |
 
+Record ticket waits with `rinkata_update_ticket_dependencies` (add/remove `blocked_by` in one call). Spec `sequence` is recommended order only. Put a Goal or spec in a batch rather than tagging each ticket. Search existing batches (`rinkata_list_batches`) before `rinkata_create_batch` — a close title match returns the existing batch instead of minting.
+
 Hub is for human authority (Accept / Ratify / Retire / Approve),
 not a second place to re-learn the DAG. Prefer progressive disclosure in the
 **terminal** (preflight JSON → work_queue page → impact) over new Hub chrome.
@@ -284,29 +278,34 @@ not a second place to re-learn the DAG. Prefer progressive disclosure in the
   - `rinkata_archive_spec` — explicit `downstream` (`archive|detach|migrate|manual`)
   - `rinkata_complete_spec` — all members `done`/`archived`
   - `rinkata_read_spec` / `rinkata_list_specs`
+- **Goal writes:** `rinkata_write_goal` for title/body/status. Restore targets are separate: archived→draft (ungated); archived→active (human Hub session or durable `rinkata_record_human_approval` stamp); archived→Complete/`shipped` (same human/stamp class as Active, not the same status as Active). Archive is that same human/stamp class. Stamp consume class also covers `approve_goal` / `approve_spec` / `set_spec_status(to=approved)`. Agents must not forge archive. Prefer Hub **Settings → Archived work**.
 - Propose Goal/Spec drift: `rinkata_propose_staged_reconcile({ target })` —
-  surface plan; do not apply without approval. If `truncated: true`, re-fetch with
-  a high enough limit (or reassemble pages) so the full action list is present
-  before apply.
+  surface the plan and hand it to a human; agents never apply. If `truncated: true`,
+  re-fetch with a high enough limit (or reassemble pages) so the full action list
+  is present before it goes to a human.
 - Propose legacy ticket-level drift (no specs): `rinkata_propose_reconcile` /
-  `rinkata_reconcile_write` — surface plan; do not apply without approval.
-- Decision fan-out: `rinkata_propose_from_decision` then staged apply path below.
+  `rinkata_reconcile_write` — surface the plan and hand it to a human.
+- Decision fan-out: `rinkata_propose_from_decision` then the human apply path below.
 
-### Phase 4 — Apply (only when authorized)
+### Phase 4 — Hand off for apply (human-only)
 
-- **Staged (default for Goal/Spec):** `rinkata_apply_staged_reconcile({ plan })`
-  only after the user approved that concrete plan (per-action `approved`). On
-  `RECONCILE_GRAPH_STALE`, re-propose and re-review — never bypass. Decision-driven
-  apply clears `pending_propagation`.
-- **Classic:** `rinkata_reconcile_apply` only after the user approved that plan.
-  Re-issue on `STALE_ARTIFACT` / graph stale.
+- **Staged (default for Goal/Spec):** hand the reviewed plan to a human, who
+  applies it from the Hub UI staged reconcile drawer or with
+  `rinkata_apply_staged_reconcile({ plan })` / `rinkata reconcile staged-apply`
+  on their own human identity (per-action `approved`). Agent `pak_` keys and
+  MCP OAuth are refused with `STAGED_APPLY_HUMAN_REQUIRED` before any write —
+  hand the plan over, do not retry. On `RECONCILE_GRAPH_STALE`, re-propose and
+  re-review — never bypass. Decision-driven apply clears `pending_propagation`.
+- **Classic:** hand the plan to a human, who applies it from the Hub UI Fix
+  drift drawer or with `rinkata_reconcile_apply` on their own human identity.
+  Agent keys and MCP OAuth are refused with `RECONCILE_APPLY_HUMAN_REQUIRED`.
 
 ### Phase 5 — Close with evidence (when work has shipped)
 
 - `rinkata_complete_ticket(ticketId, evidence)` (CLI: `rinkata complete`) — never hand-edit `status: done` / `completed_at` / `completion_evidence`. Stale source → reconcile first. Evidence: PR URL, commit sha, smoke steps; tool appends protected `### Completion`. Optional `knowledgeWriteBack: { body, title?, areaId?, documentId?, heading?, mode? }` records what we now know: mint a note in an existing area or Unfiled, or amend a listed document (`documentId` + `append`|`replace`|`new_heading`|`replace_document`). `mode=replace_document` (or heading-less `mode=replace`) replaces the whole stored markdown; heading-ful `replace` still needs a heading; `append` / `new_heading` stay additive. Best-effort — Complete still succeeds if ingest fails. Prefer a covering doc over a parallel `What we learned — TICK-X` note. Or call `rinkata_knowledge_record` after Complete. Agents cannot mint areas or invent a document id.
 - **Real proof:** for feature tickets with a Complete panel, attach structured evidence:
   - Tests: `rinkata demo propose <SPEC-ID> --tests <report.json>` (Vitest/Jest `--reporter=json` → pass/fail rows).
-  - Screenshots: prefer `rinkata_upload_demo_screenshot({ contentBase64, label })` (Hub MCP; same caps as the HTTP route), then `rinkata_complete_ticket` `screenshots[]` or `rinkata_propose_demo_evidence({ specId, type: "screenshot", url })`. When FE/UI work produced walkthrough captures (e.g. Cursor Cloud screenshot captures), upload those bytes — do not paste Cursor agent artifact page URLs (auth-gated HTML, not image tiles). Hub remains valid with an OAuth session.
+  - Screenshots: prefer `rinkata_upload_demo_screenshot({ contentBase64, label })` (Hub MCP; same caps as the HTTP route), then pass only the returned Hub URL to `rinkata_complete_ticket` `screenshots[]` or `rinkata_propose_demo_evidence({ specId, type: "screenshot", url })`. Capture at a viewport of at least 1440×900 with deviceScaleFactor: 2. Hub hard-refuses smaller or soft/mushy bitmaps before store (`SCREENSHOT_TOO_SMALL` / `SCREENSHOT_TOO_SOFT`). Do not re-shot a Complete tile. Upload max is 8 MiB / 40 million pixels. Tiles render in spec/ticket drawers, not on Complete cards. When FE/UI work produced walkthrough captures (e.g. Cursor Cloud screenshot captures), upload those bytes. Review each capture before upload: do not upload one that shows secrets, credentials, tokens, or personal/customer data — recapture with test data or crop it first. A Cursor agent artifact page is auth-gated HTML. It is stored as type url, not a tile. Hub remains valid with an OAuth session.
   Both land as accepted evidence immediately. Optional pack-level human verdict is non-blocking attestation — rinkata records, does not gate shipping.
 
 ## Session-scoped completion conditions (ticket as goal)
@@ -348,14 +347,19 @@ Reconcile at the spec boundary so Goal drift does not cascade into every ticket.
 
 1. `rinkata_propose_staged_reconcile({ target })` — Goal path → stage 1; spec path → stage 2.
 2. Human reviews the concrete plan; ensure the action list is complete (`truncated: false`).
-3. `rinkata_apply_staged_reconcile({ plan })` after explicit approval.
+3. A human applies it — Hub UI staged reconcile drawer, or
+   `rinkata_apply_staged_reconcile({ plan })` / CLI staged-apply on their own
+   human identity. Agent keys and MCP OAuth are refused with
+   `STAGED_APPLY_HUMAN_REQUIRED`.
 
 CLI parity: `rinkata reconcile staged <target> --json` /
 `rinkata reconcile staged-apply --plan <file> --approve-all --yes`
 (or per-action `approved:true`).
-Hub staged drawer remains an alternate human surface. Classic
-`rinkata_propose_reconcile` / `rinkata_reconcile_write` / `rinkata_reconcile_apply`
-still cover Goal-anchored tickets without specs / legacy ticket-level drift.
+Hub staged drawer is the human apply surface. Classic
+`rinkata_propose_reconcile` / `rinkata_reconcile_write` still cover Goal-anchored
+tickets without specs / legacy ticket-level drift; a human applies those plans
+from the Hub UI Fix drift drawer or with `rinkata_reconcile_apply` on their own
+human identity.
 
 - Goal path → **stage 1** (Goal→Spec): ABSORB / DEFER / UPDATE / CREATE / ARCHIVE per spec.
 - Spec path → **stage 2** (Spec→Ticket): ABSORB members with mismatched `source_hash`.

@@ -1,13 +1,7 @@
 ---
 name: rinkata-ticket-complete
-version: 0.1.8
-description: |
-  Close a rinkata ticket with shipped evidence. Runs preflight first, refuses stale
-  or blocked chains, then calls rinkata_complete_ticket so status, completed_at,
-  completion_evidence, and the protected Completion block are written by the tool.
-  Load mid-session without a slash when the work has shipped (rinkata_complete_ticket)
-  or the user wants only to record what we now know (rinkata_knowledge_record;
-  do not complete).
+version: 0.1.12
+description: 'Close a rinkata ticket with shipped evidence. Runs preflight first, refuses stale or blocked chains, then calls rinkata_complete_ticket so status, completed_at, completion_evidence, and the protected Completion block are written by the tool. Load mid-session without a slash when the work has shipped (rinkata_complete_ticket) or the user wants only to record what we now know (rinkata_knowledge_record; do not complete).'
 triggers:
   - /rinkata-ticket-complete
   - "complete ticket TICK-"
@@ -81,10 +75,16 @@ At startup, call `requireTools(["rinkata_preflight_ticket", "rinkata_read_ticket
    and stop.
    Otherwise, if the ticket has a `spec`, call `rinkata_read_spec` and render
    the spec acceptance criteria before closing.
-6. For FE/UI work: if walkthrough screenshots exist (Cursor Cloud screenshot captures, or equivalent), upload each with
-   `rinkata_upload_demo_screenshot({ contentBase64, label })` and collect the
-   returned `url`s. Do not use Cursor agent artifact page links as screenshot
-   tiles. If the upload tool is missing, warn and Complete without screenshots.
+6. For FE/UI work: if walkthrough screenshots exist (Cursor Cloud screenshot captures, or equivalent), capture at a
+   viewport of at least 1440×900 with deviceScaleFactor: 2. Hub hard-refuses smaller or soft/mushy bitmaps
+   before store (`SCREENSHOT_TOO_SMALL` / `SCREENSHOT_TOO_SOFT`). Do not
+   re-shot a Complete tile. Upload max is 8 MiB / 40 million pixels.
+   Review each capture before upload: do not upload one that shows secrets, credentials, tokens, or personal/customer data — recapture with test data or crop it first. Upload each with
+   `rinkata_upload_demo_screenshot({ contentBase64, label })` and pass only
+   the returned Hub URL in `screenshots[]`. Tiles render in spec/ticket
+   drawers, not on Complete cards. A Cursor agent artifact page is
+   auth-gated HTML. It is stored as type url, not a tile. If the upload tool is missing, warn and
+   Complete without screenshots.
    Then call `rinkata_complete_ticket({ ticketId, evidence, screenshots?,
    testReport?, knowledgeWriteBack? })`. Never hand-edit `status: done`,
    `completed_at`, or `completion_evidence`. If we learned something that

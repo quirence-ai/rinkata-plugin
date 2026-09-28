@@ -36,10 +36,8 @@ It is the mutating sibling of the read-only `/rinkata-orient`: orient answers "w
 - `rinkata-orient` — the project-level entry point that suggests which ticket to start
 - `rinkata-ticket-goal` — Host-agnostic session goal / completion condition prep (with optimized Claude Code path); deliberately separate from this skill (this one mutates status)
 - `rinkata-ops` — ambient Hub-truth contract
-- filledParents reporting after official Start
-- original implementation ticket; DEC-016 — eng-reviewed design decision
 
 ## How to test it
 
-Install this plugin from the Cursor Marketplace (or symlink locally as in the repo README) and connect Hub MCP with OAuth.
+Install this plugin from cursor.directory (or copy it locally as in the repo README) and connect Hub MCP with OAuth.
 In a Hub-backed project, run `/rinkata-ticket-start <ticket-id>` against a `todo` ticket. Expect the preflight verdict, the context pack, the claim/start, then a `filledParents` report (list or empty).

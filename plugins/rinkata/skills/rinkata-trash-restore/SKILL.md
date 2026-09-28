@@ -1,9 +1,7 @@
 ---
 name: rinkata-trash-restore
 version: 0.1.0
-description: |
-  Recover or inspect archived rinkata work without silent resurrection. Surfaces
-  archived specs/tickets and requires an explicit restore/re-anchor decision.
+description: 'Recover or inspect archived rinkata work without silent resurrection. Surfaces archived specs/tickets and requires an explicit restore/re-anchor decision.'
 triggers:
   - /rinkata-trash-restore
   - trash restore

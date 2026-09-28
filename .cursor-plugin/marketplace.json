@@ -5,13 +5,13 @@
     "email": "bryan@quirence.ai"
   },
   "metadata": {
-    "description": "Hub-only source-of-truth consistency engine for AI-assisted product development. Hub owns Goals, specs, tickets, decisions, reconcile artifacts, and completion evidence; local files are cache/import-export surfaces only."
+    "description": "Keep your AI agents aligned with what you decided to build. Rinkata holds your Goals, specs, tickets, and decisions, and flags when code work drifts from them. It connects over MCP with OAuth, so there are no keys to paste."
   },
   "plugins": [
     {
       "name": "rinkata",
       "source": "./plugins/rinkata",
-      "description": "Hub-only source-of-truth consistency engine for AI-assisted product development. Hub owns Goals, specs, tickets, decisions, reconcile artifacts, and completion evidence; local files are cache/import-export surfaces only."
+      "description": "Keep your AI agents aligned with what you decided to build. Rinkata holds your Goals, specs, tickets, and decisions, and flags when code work drifts from them. It connects over MCP with OAuth, so there are no keys to paste."
     }
   ]
 }

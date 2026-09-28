@@ -6,7 +6,7 @@
     "name": "Quirence",
     "github": "quirence-ai"
   },
-  "version": "0.1.47",
+  "version": "0.1.55",
   "requires": {
     "services": [],
     "tools": [
@@ -25,5 +25,5 @@
   "difficulty": "beginner",
   "estimated_time": "auto-loaded",
   "created": "2026-05-06",
-  "updated": "2026-08-31"
+  "updated": "2026-09-16"
 }

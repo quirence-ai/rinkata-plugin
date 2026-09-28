@@ -17,11 +17,9 @@ The output shape is fixed so downstream skills (`/rinkata-orient`, `/rinkata-tic
 
 ## How to test it
 
-Install this plugin from the Cursor Marketplace (or symlink locally as in the repo README) and connect Hub MCP with OAuth.
+Install this plugin from cursor.directory (or copy it locally as in the repo README) and connect Hub MCP with OAuth.
 In a rinkata-backed project, type `/rinkata-orient` (Claude Code) or invoke the equivalent in your harness. Expect the fixed-shape orient summary in <3s.
 
 ## Related
 
 - `rinkata-ops` — ambient files-as-truth contract (always-on)
-- implementation ticket for this skill
-- capability/parity registry that this skill will call into for tool-availability checks (pending)
