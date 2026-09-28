@@ -1,9 +1,7 @@
 ---
 name: rinkata-import-project
 version: 0.1.2
-description: |
-  Bring an existing project under rinkata without guessing. Inventories current
-  Goals/specs/tickets, identifies source-of-truth gaps, and proposes import work.
+description: 'Bring an existing project under rinkata without guessing. Inventories current Goals/specs/tickets, identifies source-of-truth gaps, and proposes import work.'
 triggers:
   - /rinkata-import-project
   - import project

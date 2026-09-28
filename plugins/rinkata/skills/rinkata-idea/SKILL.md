@@ -1,20 +1,7 @@
 ---
 name: rinkata-idea
 version: 0.2.1
-description: |
-  Capture a raw user idea, classify it, and promote it through the canonical
-  rinkata MCP write path. Use this skill for /idea, /rinkata-idea, "capture this
-  idea", "turn this into a Goal", "turn this into a spec", or when a user asks
-  whether an idea should become a Goal, standalone spec, anchored ticket, or
-  spike. Also use it when a user asks to list, review, or find captured
-  ideas. Load mid-session without a slash when an idea is still on Ideas, the
-  user confirms a destination, or they want a successor of a complete spec from
-  an idea — then call rinkata_promote_idea (do not create_standalone_spec +
-  originIdeaId). Specs can now live on their own: a standalone spec is a valid
-  destination when the idea is already concrete enough to be a contract but does
-  not need a Goal section yet. When an idea has HubImages, list/read returns
-  coverImageId / images[] metadata; call rinkata_read_hub_image to vision-read
-  the cover — do not invent a second ceremony.
+description: 'Capture a raw user idea, classify it, and promote it through the canonical rinkata MCP write path. Use this skill for /idea, /rinkata-idea, "capture this idea", "turn this into a Goal", "turn this into a spec", or when a user asks whether an idea should become a Goal, standalone spec, anchored ticket, or spike. Also use it when a user asks to list, review, or find captured ideas. Load mid-session without a slash when an idea is still on Ideas, the user confirms a destination, or they want a successor of a complete spec from an idea — then call rinkata_promote_idea (do not create_standalone_spec + originIdeaId). Specs can now live on their own: a standalone spec is a valid destination when the idea is already concrete enough to be a contract but does not need a Goal section yet. When an idea has HubImages, list/read returns coverImageId / images[] metadata; call rinkata_read_hub_image to vision-read the cover — do not invent a second ceremony.'
 triggers:
   - /idea
   - /rinkata-idea

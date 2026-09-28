@@ -1,26 +1,7 @@
 ---
 name: rinkata-ticket-start
 version: 0.2.10
-description: |
-  The "I'm picking up TICK-X" entry point for any rinkata-backed project.
-  Runs preflight on the ticket, refuses on a broken chain (stale source,
-  unsatisfied blocker), surfaces the ticket body + spec acceptance
-  criteria into the transcript so the agent has context BEFORE working,
-  then claims the ticket — assigns it to the caller and transitions it
-  todo → in_progress in one call via rinkata_claim (official Start).
-  After a successful Start, always reports server `filledParents` (print
-  kind+id entries, or state that the array is empty — never invents fills).
-
-  Use this skill when an engineer or AI agent is about to start work on
-  a specific ticket — typically right after /rinkata-orient suggests one.
-  /rinkata-orient answers "what should I work on"; /rinkata-ticket-start
-  claims the chosen ticket and packs its context. Also load mid-session
-  without a slash when the user is picking up, starting, or claiming a
-  ticket (claim vs start: rinkata_claim start:false vs default start:true).
-
-
-  Mutating: this skill flips ticket status. It never flips status as a
-  side effect of any other action — only on its own explicit invocation.
+description: 'The "I’m picking up TICK-X" entry point for any rinkata-backed project. Runs preflight on the ticket, refuses on a broken chain (stale source, unsatisfied blocker), surfaces the ticket body + spec acceptance criteria into the transcript so the agent has context BEFORE working, then claims the ticket — assigns it to the caller and transitions it todo → in_progress in one call via rinkata_claim (official Start). After a successful Start, always reports server `filledParents` (print kind+id entries, or state that the array is empty — never invents fills). Use this skill when an engineer or AI agent is about to start work on a specific ticket — typically right after /rinkata-orient suggests one. /rinkata-orient answers "what should I work on"; /rinkata-ticket-start claims the chosen ticket and packs its context. Also load mid-session without a slash when the user is picking up, starting, or claiming a ticket (claim vs start: rinkata_claim start:false vs default start:true). Mutating: this skill flips ticket status. It never flips status as a side effect of any other action — only on its own explicit invocation.'
 triggers:
   - /rinkata-ticket-start
   - "start ticket TICK-"
@@ -138,7 +119,7 @@ projects
      is not the caller (or `nextHop.tool` is null with reason `Owned by …`,
      or `claimAction` is `none` for ownership), honor that and stop. Server
      Start refuses steal (`ALREADY_CLAIMED`). `write_ticket_body` has no
-     assignee gate (GOAL-52), so enriching first would rewrite someone else's
+     assignee gate, so enriching first would rewrite someone else's
      stub. Unassigned stubs still take the mint-stub enrich guard after
      lifecycle.
    - **Start + `done` or `archived`** → skip, surface "ticket is `<status>`;

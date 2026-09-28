@@ -19,15 +19,17 @@ Encodes rinkata's agent rules — the same rules in host agent rule files — as
 - **Claim vs Start** are distinct: Claim is assignee-only; Start is ticket official
   `rinkata_claim` / `/rinkata-ticket-start`. Parent fill lives only on the server —
   skills report `filledParents` and never reimplement sole-branch rules
-- Prefer staged Goal/Spec drift: `rinkata_propose_staged_reconcile` then human-gated
-  `rinkata_apply_staged_reconcile` (CLI `reconcile staged` / `staged-apply`). Classic
-  `rinkata_reconcile_write` / `rinkata_reconcile_apply` only for Goal-anchored tickets
-  without specs — surface plans; never apply without approval
+- Prefer staged Goal/Spec drift: `rinkata_propose_staged_reconcile`, then hand the plan
+  to a human, who applies it (Hub staged reconcile drawer, or
+  `rinkata_apply_staged_reconcile` / CLI `reconcile staged-apply` on their own
+  human identity). Classic `rinkata_propose_reconcile` / `rinkata_reconcile_write` only
+  for Goal-anchored tickets without specs — surface plans and hand them over; apply is
+  human-only
 - Preserve protected human notes verbatim
 
 ## How to test it
 
-Install this plugin from the Cursor Marketplace (or symlink locally as in the repo README) and connect Hub MCP with OAuth.
+Install this plugin from cursor.directory (or copy it locally as in the repo README) and connect Hub MCP with OAuth.
 In any rinkata-backed project, ask the agent: "What's the status of TICK-123?" Verify the agent calls `rinkata_status` first instead of reading local files.
 
 ## Related

@@ -1,17 +1,7 @@
 ---
 name: rinkata-feedback
 version: 0.1.1
-description: |
-  Volunteer free-form feedback about using rinkata itself — a moment of
-  friction, a confusing error, a surprising or a genuinely great result —
-  by calling the rinkata_submit_feedback MCP tool. This is product feedback
-  to the rinkata team, not project work: it lands in the team's triage queue
-  (Hub → Admin → Feedback), where it can be resolved or promoted into the
-  inbox → ticket pipeline.
-
-  Use this skill when the user says "send feedback", "/rinkata-feedback",
-  "tell the rinkata team …", or when you (the agent) hit something worth
-  reporting while using rinkata. A human or agent volunteers the signal directly.
+description: 'Volunteer free-form feedback about using rinkata itself — a moment of friction, a confusing error, a surprising or a genuinely great result — by calling the rinkata_submit_feedback MCP tool. This is product feedback to the rinkata team, not project work: it lands in the team’s triage queue (Hub → Admin → Feedback), where it can be resolved or promoted into the inbox → ticket pipeline. Use this skill when the user says "send feedback", "/rinkata-feedback", "tell the rinkata team …", or when you (the agent) hit something worth reporting while using rinkata. A human or agent volunteers the signal directly.'
 triggers:
   - /rinkata-feedback
   - "send feedback"

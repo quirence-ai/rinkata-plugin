@@ -1,18 +1,7 @@
 ---
 name: rinkata-orient
 version: 0.1.7
-description: |
-  One-call orient for any rinkata-backed project. Surfaces project truth
-  — counts, drift, doctor verdict, top blockers, and a suggested next
-  action. Always reads Hub truth through the active rinkata MCP surface. Use this
-  skill at session start for any rinkata project, whenever the user asks "what's
-  the state of this project?" or "what should I work on?", or any time
-  context-restoration is needed mid-session.
-
-
-  Read-only: this skill never mutates project state. For mutations
-  (decide, ticket-start, ticket-complete) use the dedicated
-  skills.
+description: 'One-call orient for any rinkata-backed project. Surfaces project truth — counts, drift, doctor verdict, top blockers, and a suggested next action. Always reads Hub truth through the active rinkata MCP surface. Use this skill at session start for any rinkata project, whenever the user asks "what’s the state of this project?" or "what should I work on?", or any time context-restoration is needed mid-session. Read-only: this skill never mutates project state. For mutations (decide, ticket-start, ticket-complete) use the dedicated skills.'
 triggers:
   - /rinkata-orient
   - any rinkata project session start

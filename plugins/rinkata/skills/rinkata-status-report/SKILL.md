@@ -1,9 +1,7 @@
 ---
 name: rinkata-status-report
 version: 0.1.0
-description: |
-  Produce a project status report from rinkata truth: counts, drift, blockers,
-  in-flight specs, completion gaps, and suggested next actions. Read-only.
+description: 'Produce a project status report from rinkata truth: counts, drift, blockers, in-flight specs, completion gaps, and suggested next actions. Read-only.'
 triggers:
   - /rinkata-status-report
   - status report
