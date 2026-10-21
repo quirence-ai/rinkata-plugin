@@ -1,12 +1,12 @@
 {
   "name": "rinkata-ticket-start",
-  "description": "Preflight + claim + context pack for a rinkata ticket — refuses on a broken chain, surfaces ticket body + spec acceptance, then claims via rinkata_claim (official Start: assign + todo→in_progress) and reports server filledParents (no client parent-fill).",
+  "description": "Advisory preflight + context pack + ownership through rinkata_claim. Reports server filledParents without client parent-fill; drafting and alignment drift do not gate Start.",
   "category": "skills",
   "author": {
     "name": "Quirence",
     "github": "quirence-ai"
   },
-  "version": "0.2.10",
+  "version": "0.3.2",
   "requires": {
     "services": [],
     "tools": [

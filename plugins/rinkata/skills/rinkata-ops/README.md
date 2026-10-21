@@ -15,7 +15,7 @@ Encodes rinkata's agent rules — the same rules in host agent rule files — as
 
 - Use the rinkata MCP tools (`rinkata_status`, `rinkata_preflight_ticket`,...) for Hub artifact reads and writes
 - Never read or write repo-local rinkata artifact directories
-- Run preflight before ticket work; treat `STALE_ARTIFACT` as a blocker, not a hint
+- Read advisory preflight before ticket work; alignment drift is a discrepancy, while a stale expectedVersion is a write conflict
 - **Claim vs Start** are distinct: Claim is assignee-only; Start is ticket official
   `rinkata_claim` / `/rinkata-ticket-start`. Parent fill lives only on the server —
   skills report `filledParents` and never reimplement sole-branch rules

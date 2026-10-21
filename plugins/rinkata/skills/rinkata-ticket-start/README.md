@@ -6,7 +6,7 @@ The "I'm picking up TICK-X" entry point for any rinkata-backed project. Prefligh
 
 `/rinkata-ticket-start <ticket-id>`:
 
-1. Runs `rinkata_preflight_ticket` and **refuses on a broken chain** — a stale source, an unsatisfied `blocked_by`, an unknown source. Never claims a ticket that isn't safe to start.
+1. Reads advisory `rinkata_preflight_ticket`, reports alignment and dependency discrepancies, and continues. The server enforces `PAUSED`, `RECOVERY_HOLD`, access and version integrity.
 2. Surfaces the **ticket body** + the **spec's acceptance criteria** into the transcript — the agent has context *before* it commits.
 3. Claims via **`rinkata_claim`** (official Start): assigns the ticket to the caller and transitions **`todo` → `in_progress`** in one write.
 4. After a successful Start (`started: true`), **reports server `filledParents`** (`{kind,id}[]`; explicit `[]` means no fill). If the field is absent, report unavailable (reconnect MCP) — do not coerce missing to empty. Never invents parent fills or reimplements sole-branch / parent-fill rules — Hub `claim_start` owns that policy.
@@ -21,11 +21,11 @@ It is the mutating sibling of the read-only `/rinkata-orient`: orient answers "w
 
 ## Behavior contract
 
-- **Preflight gates.** Non-safe preflight → blocker + recovery hint, no status change.
+- **Preflight is advisory.** Stale, blocked and unknown alignment are context for work.
 - **Context before claim.** The ticket body + spec acceptance are rendered before `rinkata_claim` is called.
 - **Invocation is the confirmation.** Typing the command is the explicit start intent — no second prompt. The skill never flips status as a side effect of anything else.
 - **Idempotent re-run.** On an already-`in_progress` ticket it re-renders the context pack and does **not** call `rinkata_claim` (avoids steal). On a `done` / `archived` ticket it refuses (no surprise reopen).
-- **Non-approved-spec guard.** A spec-anchored ticket only starts once its spec is `approved`. Skill-side copy explains the refusal; Hub `rinkata_claim` also enforces the Spec gate server-side.
+- **Direct operations.** `rinkata_update_ticket` starts, reopens and edits title or assignee; `rinkata_claim` takes ownership and can Start. Drafting specs allow Start.
 - **filledParents reporting.** Always surface `filledParents` from the Start response when `started: true` — print kind+id for each entry, or state explicitly that the array is empty. Do not client-write parent assignees.
 - **Branch creation is opt-in** — the skill suggests a name; it never runs git.
 - **Scenario coverage.** Tests lock happy path, stale/blocker paths, no-spec / spec-anchored paths, and filledParents reporting.

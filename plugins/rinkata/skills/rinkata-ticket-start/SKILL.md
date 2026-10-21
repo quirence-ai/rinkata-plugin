@@ -1,7 +1,7 @@
 ---
 name: rinkata-ticket-start
-version: 0.2.10
-description: 'The "I’m picking up TICK-X" entry point for any rinkata-backed project. Runs preflight on the ticket, refuses on a broken chain (stale source, unsatisfied blocker), surfaces the ticket body + spec acceptance criteria into the transcript so the agent has context BEFORE working, then claims the ticket — assigns it to the caller and transitions it todo → in_progress in one call via rinkata_claim (official Start). After a successful Start, always reports server `filledParents` (print kind+id entries, or state that the array is empty — never invents fills). Use this skill when an engineer or AI agent is about to start work on a specific ticket — typically right after /rinkata-orient suggests one. /rinkata-orient answers "what should I work on"; /rinkata-ticket-start claims the chosen ticket and packs its context. Also load mid-session without a slash when the user is picking up, starting, or claiming a ticket (claim vs start: rinkata_claim start:false vs default start:true). Mutating: this skill flips ticket status. It never flips status as a side effect of any other action — only on its own explicit invocation.'
+version: 0.3.2
+description: 'The "I’m picking up TICK-X" entry point for any rinkata-backed project. Runs preflight on the ticket, reports advisory alignment and dependency discrepancies, surfaces the ticket body + spec acceptance criteria into the transcript so the agent has context BEFORE working, then claims the ticket — assigns it to the caller and transitions it todo → in_progress in one call via rinkata_claim (official Start). After a successful Start, always reports server `filledParents` (print kind+id entries, or state that the array is empty — never invents fills). Use this skill when an engineer or AI agent is about to start work on a specific ticket — typically right after /rinkata-orient suggests one. /rinkata-orient answers "what should I work on"; /rinkata-ticket-start claims the chosen ticket and packs its context. Also load mid-session without a slash when the user is picking up, starting, or claiming a ticket (claim vs start: rinkata_claim start:false vs default start:true). Mutating: this skill flips ticket status. It never flips status as a side effect of any other action — only on its own explicit invocation.'
 triggers:
   - /rinkata-ticket-start
   - "start ticket TICK-"
@@ -31,11 +31,11 @@ Load mid-session (no slash) when the user is picking up, starting, or claiming a
 ticket. Claim vs start: `rinkata_claim` (`start: false` vs default `start: true`).
 
 `/rinkata-ticket-start <ticket-id>` is how an engineer or agent claims a ticket.
-It refuses to start a ticket whose chain is broken, surfaces everything needed to
+It reports discrepancies in the ticket chain, surfaces everything needed to
 work the ticket, and then **claims** it — assigns the ticket to the caller and
 transitions its status to `in_progress` in one call via `rinkata_claim`.
 
-Perf budget: the calls run **sequentially** — preflight gates first, then
+Perf budget: the calls run **sequentially** — advisory preflight first, then
 `rinkata_read_ticket`, then `rinkata_read_spec` (only if the ticket is spec-anchored),
 then `rinkata_claim` (only if a start happens). Worst case is **4 Hub MCP
 round-trips**: a spec-anchored ticket that starts (preflight + 2 reads + the
@@ -72,23 +72,17 @@ projects
    preflight verdict. Missing `knowledgeCovering` means an older MCP/server;
    do not invent covering docs.
 
-4. **Gate on preflight (Start only).** Claim-only skips this step. For Start,
-   if `status !== "safe"`, STOP — never flip status on a non-safe preflight.
-   Render the blocker plainly:
-   - `stale` — the ticket's source (spec or Goal section) drifted. Surface the
-     `reasons[]` and: "Reconcile the drifted source — open the reconcile drawer
-     from the Hub UI Status tab, or run `rinkata reconcile` to propose a plan —
-     then re-run `/rinkata-ticket-start`."
-   - `blocked` — an unsatisfied `blocked_by` dependency, or `status: blocked`.
-     Name the blocking ticket ids from `reasons[]`.
-   - `unknown` — the ticket points at a missing spec / Goal section. Surface:
-     "Re-anchor the ticket to a covering spec before starting."
-   - A tool error — `rinkata_preflight_ticket` wraps every failure (including a
-     non-existent ticket id) as with the detail in the error message;
-     surface it verbatim.
-   In every non-safe case the ticket status is left untouched.
+4. **Advisory preflight (Start only).** Surface `reasons[]` for `safe`, `stale`,
+   `blocked` and `unknown`, then continue. Drafting specs, stale hashes, unlinked
+   requirements and open dependencies do not block Start. `TICKET_ALREADY_CLOSED`,
+   a person's `PAUSED`, an unreadable requirement record (`RECOVERY_HOLD`) and
+   `PARENT_NOT_FOUND` (subtasks only) still refuse on the server; report its
+   recovery without bypass. Access and version failures also
+   remain refusals. For alignment work use `rinkata_link_requirements`: add or
+   remove links, `realign` existing links, or `acknowledge: true` for an unlinked
+   ticket. New tickets under checks-on specs are born acknowledged.
 
-5. **Context pack.** Start: only after preflight is `safe`. Claim-only: still
+5. **Context pack.** Start: after advisory preflight. Claim-only: still
    run these reads (no preflight). Read the ticket first, then the spec:
    - `rinkata_read_ticket({projectId, ticketId})` — render `body` verbatim under a
      `## Ticket — <id>` heading.
@@ -98,6 +92,13 @@ projects
      (<spec-id>)`. If the ticket has no `spec` field (legacy PRD-anchored), render
      the ticket body's own checklist as the acceptance surface and note it is
      ticket-local.
+   - Render `governingDecisions` (`binding` / `pending`) from the reads under
+     `## Governing decisions`, or "none found". When present, read each
+     entry's `overrides` (verbatim clauses), `outcome` (`unchanged` |
+     `changed` | `retired`) and `appliedVersions`. A binding Decision covers
+     only its `affects` and `overrides`: if the work is not
+     clearly covered, log a proposed Decision for that point
+     (`rinkata_log_decision`) — do not extrapolate its rationale.
    - Compute a **suggested branch name** (see Branch suggestion below) and print
      it. Do NOT create the branch — that is opt-in (step 7).
 
@@ -123,7 +124,7 @@ projects
      stub. Unassigned stubs still take the mint-stub enrich guard after
      lifecycle.
    - **Start + `done` or `archived`** → skip, surface "ticket is `<status>`;
-     reopen it explicitly with `rinkata_set_ticket_status` if that is intended."
+     reopen it explicitly with `rinkata_update_ticket` if that is intended."
      Never silently reopen a closed ticket. **Do NOT call `rinkata_claim`.**
      **Do NOT call `rinkata_write_ticket_body`.** Lifecycle before enrich:
      `write_ticket_body` permits rewrites on closed tickets, and a completed
@@ -144,24 +145,13 @@ projects
      `rinkata_write_ticket_body` with `expectedVersion` from the read, keeping
      fingerprint + protected regions, no secrets. Then re-run this skill.
      Skip this guard when the body is already a non-stub.
-   - **Start + spec-anchored AND `spec.frontmatter.status !== "approved"`** →
-     STOP, do NOT Start. A ticket should only move past `todo` once its spec
-     is `approved` (the spec layer). Two cases:
-     - spec is `drafting` → "spec `<spec-id>` is `drafting` — approve it with
-       `rinkata_set_spec_status(<spec-id>, approved)` once the body + acceptance are
-       ready, then re-run `/rinkata-ticket-start`."
-     - spec is `archived` → "spec `<spec-id>` is `archived` — this ticket is an
-       orphan under a retired spec. Re-anchor or archive it
-       (`rinkata_archive_spec... downstream: migrate|detach|archive`) before
-       starting."
-     Hub MCP enforces this on official **Start** (`start: true` / `claim_start`)
-     only — not on Claim (`start: false`). Keep the skill-side copy because it
-     explains the Start refusal before mutation; server behavior is authoritative.
-   - **Start otherwise** — ticket status is `todo`, and the ticket is either not
-     spec-anchored or its spec is `approved` →
-     `rinkata_claim({projectId, kind: "ticket", id: ticketId})` (default
-     `start: true` = official Start). This assigns the ticket to the caller
-     **and** advances it `todo → in_progress` in one write when Start succeeds.
+   - **Start otherwise** — call `rinkata_claim({projectId, kind: "ticket", id: ticketId})`
+     (default `start: true`) for ownership plus Start. A drafting spec and drift
+     are discrepancies; the server decides whether a hold refuses the write.
+     `rinkata_update_ticket` is the direct operation for Start without taking
+     ownership, reopen, title and assignee edits. It requires `expectedVersion`.
+     `rinkata_set_ticket_status` uses that same operation for open statuses.
+     Only `rinkata_complete_ticket` sets done; archive keeps its own paths.
      A successful tool result carries
      `{ assignee, status, started, startedAt?, filledParents }` where
      `filledParents` is always an array on current Hub (`[]` when nothing was
@@ -193,7 +183,7 @@ projects
      Do **not** invent a `startError` field — Hub does not return one on
      success. Do **not** claim the ticket "failed to start" or invent a
      retry reason from a missing field.
-     **Tool / Hub errors** (e.g. Spec not approved, preflight unsafe,
+     **Tool / Hub errors** (e.g. PAUSED, RECOVERY_HOLD, PARENT_NOT_FOUND,
      steal, not found) are **zero-write failures** — the tool rejects the
      call; there is no success payload with `started`/`filledParents`.
      Surface the error code/message and stop; do not invent assignment or
@@ -214,15 +204,15 @@ The implementation and tests for this skill must cover these paths:
   `in_progress`. After a successful Start (`started: true`), the skill prints
   server `filledParents` (list of kind+id, or explicit empty `[]`) without
   inventing fills; an absent field is reported as unavailable, not as empty.
-- **Stale source path** — `status: "stale"` renders the stale artifact reasons
-  plus a reconcile recovery hint, then stops without a status write.
-- **Blocker path** — `status: "blocked"` renders the blocking ticket ids from
-  `reasons[]`, then stops without a status write.
+- **Stale source path** — show the discrepancy, then attempt Start; never edit
+  hashes directly. `rinkata_link_requirements` realigns existing links.
+- **Blocker path** — report blocking ticket ids as context, then attempt Start.
+  Only the server's holds refuse the operation.
 - **No-spec ticket path** — a ticket with no `spec` field uses the ticket-local
-  checklist as its acceptance surface and does not call `rinkata_read_spec`.
-- **Spec-anchored ticket path** — a ticket with `spec` calls
-  `rinkata_read_spec`, renders `frontmatter.acceptance[]`, and **Start** refuses
-  if the spec status is anything other than `approved`.
+  checklist and does not call `rinkata_read_spec`.
+- **Spec-anchored ticket path** — a ticket that has a `spec` field reads
+  `frontmatter.acceptance[]`; drafting is allowed. `PAUSED`, `RECOVERY_HOLD`
+  and `PARENT_NOT_FOUND` (subtasks only) still refuse. The spec lifecycle alone does not gate Start.
 - **Claim-only path** — `start: false` assigns under a drafting spec; status
   stays `todo`. Does not apply the Start spec-approved gate. Server steal-protects.
 - **Mint-stub enrich path** — Start on an Intent+mapping stub
@@ -278,23 +268,17 @@ If a Hub call fails, show the error and follow the recovery line:
 
 ## What this skill does NOT do
 
-- It does not claim on a non-safe preflight, and it does not reopen a
-  `done` / `archived` ticket. The `done`/`archived` guard reads status from
-  step 5's `rinkata_read_ticket`; `rinkata_claim` only advances a ticket that is
-  still `todo` (its start is a no-op on any other status), so it will not reopen
-  a closed ticket — but it also does not *assign* one it won't start, so the
-  skill's read-time guard is what surfaces the "already closed" message rather
-  than a silent no-op. The narrow race where a ticket is completed between the
-  step-5 read and the claim is caught server-side: `rinkata_claim` leaves a
-  non-`todo` ticket's status untouched. The skill's guard is best-effort and
-  explains the refusal before the call.
+- It does not silently reopen a `done` or `archived` ticket. Reopen is an
+  explicit `rinkata_update_ticket` operation. Claim keeps ownership protection
+  (`ALREADY_CLAIMED`, `TICKET_ALREADY_CLOSED`). Advisory preflight never adds a
+  second Start gate. Server integrity errors are surfaced without bypass.
 - It does not flip status as a side effect of any other skill — only on an
   explicit invocation of this skill (slash or mid-session pick-up / start /
   claim), never as a side effect of another skill. Claim-only invocations
   (`start: false`) must not flip status.
 - It does not create or check out git branches (it only suggests a name).
-- It does not surface "linked decisions" — there is no ticket→decision link in
-  the data model today; not in this skill.
+- It does not guess "linked decisions" from prose — it renders only the
+  server's `governingDecisions` (step 5).
 - It does **not** reimplement parent-fill or sole-branch Goal policy. Parent
   fills happen only inside official Start (`rinkata_claim` / Hub `claim_start`);
   the skill only **reports** `filledParents` from that response and never
@@ -330,10 +314,7 @@ If a Hub call fails, show the error and follow the recovery line:
 
 ## Why this shape
 
-The context pack is rendered *before* the status flip on purpose: an agent that
-flips a ticket to `in_progress` and only then reads its body has already
-committed before it has context. Surfacing the ticket body + spec acceptance
-first means the agent decides to start with the acceptance criteria already in
-view. The preflight gate up front means a ticket with a broken chain (drifted
-source, unsatisfied blocker) is never silently claimed — the engineer fixes the
-chain first. Both properties make `/rinkata-ticket-start` safe to run on autopilot.
+The context pack is rendered *before* the status flip so the agent has the
+acceptance criteria in view before claiming. Preflight reports alignment and
+dependency discrepancies while the server enforces holds and access integrity.
+The invocation authorizes the Start without another confirmation.
