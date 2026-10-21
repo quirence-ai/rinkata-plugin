@@ -1,12 +1,12 @@
 {
   "name": "rinkata-ticket-complete",
-  "description": "Close a rinkata ticket with shipped evidence through rinkata_complete_ticket after preflight and context surfacing.",
+  "description": "Complete with optional evidence and advisory preflight; report discrepancies and server holds, preserving append-only completion facts.",
   "category": "skills",
   "author": {
     "name": "Quirence",
     "github": "quirence-ai"
   },
-  "version": "0.1.12",
+  "version": "0.1.15",
   "requires": {
     "services": [],
     "tools": [

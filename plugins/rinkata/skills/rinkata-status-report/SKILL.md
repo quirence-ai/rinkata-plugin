@@ -1,6 +1,6 @@
 ---
 name: rinkata-status-report
-version: 0.1.0
+version: 0.1.1
 description: 'Produce a project status report from rinkata truth: counts, drift, blockers, in-flight specs, completion gaps, and suggested next actions. Read-only.'
 triggers:
   - /rinkata-status-report
@@ -23,7 +23,7 @@ Render a concise project pulse from the same Hub-first truth as
 At startup, call `requireTools(["rinkata_status", "rinkata_doctor", "rinkata_list_drift"])` against the active MCP surface. If any tool is missing, render the returned parity-gap message, including any note id or alternate surface, and stop before reading status.
 
 Include artifact counts, drift counts, doctor verdict, top stale/unknown items,
-drafting specs that block work, tickets done without evidence, and a single next
+drafting specs as advisory context (they allow Start), tickets done without evidence, and a single next
 operating action. Do not mutate state.
 
 ## Behavioral test contract

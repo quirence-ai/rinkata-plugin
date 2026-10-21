@@ -1,6 +1,6 @@
 ---
 name: rinkata-reconcile
-version: 0.2.6
+version: 0.2.8
 description: 'Review and close drift between Goals, specs, and tickets. Uses rinkata reconcile tools to propose reviewable plans, hands each plan to a human to apply, and treats stale graphs as blockers. Default path for Goal/Spec drift is staged propose then human apply (not Hub-only).'
 triggers:
   - /rinkata-reconcile
@@ -10,6 +10,7 @@ tools:
   - rinkata_status
   - rinkata_list_drift
   - rinkata_propose_staged_reconcile
+  - rinkata_draft_review_rewrite
   - rinkata_read_drift_proposal
   - rinkata_apply_staged_reconcile
   - rinkata_propose_reconcile
@@ -49,13 +50,18 @@ parity problem; do not fall back to local files.
    - The response includes `proposalId`, `revision`, and `reviewUrl`. The stored
      revision has every action. Pagination only shortens this read. Share
      `reviewUrl` with the human. Do not hand them a page of actions to apply.
+   - To draft an update onto an Update row, call
+     `rinkata_draft_review_rewrite({ proposalId, artifactId, bodyRevision })`.
+     Each call writes a new immutable revision (`draftedBy`, `draftedAt`,
+     `basis {ticketVersion, specVersion}`). It does not apply. If the ticket or
+     spec version moved, apply refuses `DRAFT_OUT_OF_DATE` — draft again.
    - After the human applies, call `rinkata_read_drift_proposal({ proposalId })`.
      `lifecycle` is `open`, `partially_applied`, or `applied`. `applier` is the
      human who applied. Do not retry apply.
    - Summarize CREATE, UPDATE, ARCHIVE, ABSORB, and DEFER actions for human review.
    - **Post-mint spec edit:** when member tickets already have
      file-level plans, default the proposed verb to **ABSORB** (hash bump, no
-     ticket-body rewrite). **UPDATE** only when a ticket body is actually wrong.
+     ticket-body update). **UPDATE** only when a ticket body is actually wrong.
      Do not default to UPDATE that appends useless “Upstream” notes. Apply
      remains human-gated — this is the proposed verb, not silent absorb.
    - Hand the plan to a human to apply, once they have explicitly approved that
@@ -79,7 +85,7 @@ parity problem; do not fall back to local files.
    `rinkata decision-propagate`), review the returned staged plan(s) and hand
    them to a human, who applies with `rinkata_apply_staged_reconcile` /
    `rinkata reconcile staged-apply`.
-   Decision-driven staged apply **clears `pending_propagation`** server-side so
+   Decision-driven staged apply **clears `pending_propagation`** once no decision work is left, so
    the DEC can leave the Needs you queue. Agents propose; humans apply.
 
 Never silently absorb source-hash drift or rewrite protected human notes.
@@ -104,7 +110,7 @@ never bypass.
   `rinkata_reconcile_write` → explicit approval → hand off → a human runs
   `rinkata_reconcile_apply`.
 - **Decision-driven:** `rinkata_propose_from_decision` → human review → a human
-  runs `rinkata_apply_staged_reconcile` (clears `pending_propagation`).
+  runs `rinkata_apply_staged_reconcile` (clears `pending_propagation` once no decision work is left).
 - Refusal cases: no drift, missing tools, Hub unreachable, stale graph,
   truncated plan page, no human approval all stop before apply.
 - Protected human notes must be preserved verbatim; if a plan would rewrite

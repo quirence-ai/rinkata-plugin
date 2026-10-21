@@ -1,6 +1,6 @@
 ---
 name: rinkata-ops
-version: 0.1.55
+version: 0.2.9
 description: 'rinkata is a Hub source-of-truth consistency engine. Hub DB is canonical for Goals, specs, tickets, decisions, reconcile artifacts, inbox notes, handoffs, and completion evidence. Installed MCP tools, the CLI, and the Hub UI are the access paths; repo-local artifact directories are not a rinkata surface. Use this skill whenever the user mentions rinkata projects, tickets, preflight, reconcile, drift, doctor, ticket IDs like TICK-*, Needs you, or Decisions. Also load mid-session to mint a proposed Decision (judgment call / log a decision) then list needs_action — do not wait for a slash command.'
 triggers:
   - rinkata
@@ -32,7 +32,7 @@ tools:
   - rinkata_log_decision
   - rinkata_update_decision
   - rinkata_list_decisions
-  - rinkata_ratify_decision
+  - rinkata_accept_decision
   - rinkata_reconcile_write
   - rinkata_reconcile_apply
   - rinkata_apply_staged_reconcile
@@ -42,11 +42,15 @@ tools:
   - rinkata_knowledge_ask
   - rinkata_knowledge_record
   - rinkata_knowledge_upload
+  - rinkata_begin_demo_screenshot_upload
+  - rinkata_finalize_demo_screenshot_upload
   - rinkata_upload_demo_screenshot
   - rinkata_promote_idea
   - rinkata_plan_from_spec
   - rinkata_claim
   - rinkata_set_ticket_status
+  - rinkata_update_ticket
+  - rinkata_link_requirements
   - rinkata_supersede_tickets
   - rinkata_list_specs
   - rinkata_read_spec
@@ -74,19 +78,19 @@ writes_to:
   - Hub knowledge documents
 metadata:
   grok:
-    notes: "Discovered via host skill discovery + MCP. The agentic patterns below (plan mode, verification subagents, MCP discovery) are host-neutral and apply equally to any harness with those capabilities."
+    notes: "Native host skill discovery + MCP discovery. Agentic patterns below apply across hosts."
 ---
 
 # rinkata Operations — Hub Truth Contract
 
-Hub DB owns rinkata-managed project docs: Goals, specs, tickets, decisions, inbox
+Hub DB owns project docs: Goals, specs, tickets, decisions, inbox
 notes, reconcile plans, handoffs, and completion evidence. Installed rinkata MCP
 tools, the CLI, and the Hub UI are the only supported agent surfaces. Agents
 must not look for, read, create, or edit repo-local artifact directories. Every
 artifact has a Hub source hash pinning it to upstream truth; drift is closed via
 reviewable reconcile.
 
-Three-layer chain: **Goals** → optional **specs** → **tickets**. Specs recommended when a Goal section spawns more than one or two tickets; direct Goal-anchored tickets remain valid.
+**Goals** → optional **specs** → **tickets**. Prefer specs for multi-ticket Goal sections; direct Goal tickets remain valid.
 
 ## Contract
 
@@ -94,13 +98,12 @@ This skill guarantees:
 
 - rinkata artifact reads and writes go through Hub MCP or the Hub UI, never
   repo-local artifact files.
-- Missing or unavailable Hub truth is a blocker, not a reason to fall back to a
-  local artifact directory.
+- Unavailable Hub truth is a blocker; never fall back to local artifacts.
 - `rinkata_status` is consulted before any work; preflight runs before tickets.
-- After a read of an idea, Goal, spec, or ticket, honor `nextHop` (`tool`, `mode`, `reason`) when present. Load the owning ceremony skill; do not invent a parallel write and do not auto-execute the hop. Write-time `nextAction` and `work_queue.claimAction` are unchanged.
-- Stale source hashes are blockers, never silently overwritten.
+- After idea/Goal/spec/ticket reads, honor `nextHop` (`tool`, `mode`, `reason`) when present. Load the owning ceremony skill; do not invent a parallel write and do not auto-execute the hop. Write-time `nextAction` and `work_queue.claimAction` are unchanged.
+- Alignment drift is advisory for Start and complete. Never overwrite source hashes directly; stale expectedVersion remains a write conflict.
 - Reconcile plans are reviewable: agents propose, a human applies.
-- Protected human notes survive every reconcile.
+- Preserve protected human notes.
 
 ## Official ceremonies
 
@@ -127,35 +130,46 @@ Do **not** pick `create_standalone_spec` + `originIdeaId` instead of
 
 ## Decision-first Needs you
 
-**Needs you = Decision queue** (not bare ticket hash drift). Doctor / Reconcile / Ready stay separate.
+**Needs you = Decision queue**. Doctor / Reconcile / Ready are separate.
 
 Flow: judgment → mint **proposed** DEC → human **Accept** (one click: seal +
-ratify). The Decision is source of truth and **leaves Needs you** unless options
-are unset, seal failed, or residual is explicit **Retire covering work…**.
-`pending_propagation` is not kept for guidance-appendix / rescope / complete-spec
-refuse / DEFER.
+ratify). The Decision is source of truth. It **stays on Needs you** until every
+update to its work has applied; unset options or a failed seal also keep it
+there. A DEFER left for later, stage-2 ticket drift or a complete-spec refuse
+does not keep `pending_propagation`.
 
-- **Mint:** `rinkata_log_decision` + `affects[]`. Agents default `status: proposed` (cannot self-accept/ratify). `affects[0]` is the covering Goal this Decision is *for* (usually the newest live Goal); older Goals, specs, and tickets after. Ticket-only lists cannot Goal-group — include the covering Goal first when they should. Do not sort by `created_at`. On success for **proposed**, expect `nextAction: "list_needs_action"` — immediately list residual with `rinkata_list_decisions({ status: "needs_action" })` and surface the Needs you path; do not stop at a bare create ack.
+- **Mint:** `rinkata_log_decision` + `affects[]`. An agent default is stored `proposed` with `in_effect_at`: binding, not accepted. Explicit `status: proposed` records a plain proposal. Agent in-effect decisions stamp no `pending_propagation` and never authorize `propose_from_decision`, staged apply or dual unlock; only a person accepts/ratifies. `affects[0]` is the covering Goal this Decision is *for* (usually the newest live Goal); older Goals, specs, and tickets after. Ticket-only lists cannot Goal-group — include the covering Goal first when they should. Do not sort by `created_at`. On success for **proposed**, expect `nextAction: "list_needs_action"` — immediately list residual with `rinkata_list_decisions({ status: "needs_action" })` and surface the Needs you path; do not stop at a bare create ack.
+- **Scope-closed:** binding DECs cover only `affects[]` + `overrides[]`. Outside that scope, propose a DEC; never extrapolate. Overrides require the verbatim artifact clause.
 - **List:** `rinkata_list_decisions({ status: "needs_action" })` (alias `actionable`) — same oracle as Hub Needs you.
-- **Accept:** Hub primary CTA is **Accept**. Human seal (`accepted` + durable ratify). Pending clears unless residual is explicit `intent: remove`. Mechanical ABSORB / Goal→Spec CREATE may run in the same request.
-- **Ratify:** **human only** via `rinkata_ratify_decision` / Hub / ratify-on-merge. Stamps `ratified_at`+`ratified_by`. Agents: `RATIFY_HUMAN_REQUIRED`. Same-call booleans / generic PUT → `RATIFY_FORGE_REFUSED`. Never forge ratify stamps.
+- **Accept:** Hub primary CTA is **Accept**. Human seal (`accepted` + durable ratify). Pending clears once every update has applied (an explicit `intent: remove` also waits for DEFER and ticket drift). Mechanical ABSORB / Goal→Spec CREATE may run in the same request.
+- **Stamp:** Hub Accept / human `rinkata_accept_decision` stamps `ratified_at`+`ratified_by`, accepts proposals and returns `status`. Human sessions only; agents get `RATIFY_HUMAN_REQUIRED`, generic writes/booleans `RATIFY_FORGE_REFUSED`. Retries keep the original seal, validate options and accept the current body; read first. Merge only stamps when `ratification_pr` matches; never accepts. `decision_accept` audits with the write.
 - **Retire:** confirm-gated ARCHIVE (`intent: remove`). Never from free-form Decision body. Never auto on Accept. **Reject** (proposed only) is lifecycle-only. After a successful Accept the next hop is not **Update guidance** / **Check residual** / **Apply residual** / **Clear pending**. Absorb failure is **Retry**. Technical tools: `rinkata_propose_from_decision` with explicit `intent: remove|rescope` (default auto = rescope) then human-gated staged apply. Agents propose, humans Accept — never agent-forge apply.
 - **Supersede:** `status: superseded` needs durable `supersededBy` (not prose-only).
 - **Dual unlock (S3+S5):** evidence-bound/complete SPEC rewrites refuse `SUCCESSOR_REQUIRED` — prefer successor. After **human-ratified** DEC, retry `rinkata_write_spec_body` / `rinkata_set_spec_acceptance` with **`decisionId`**. Claimed `decisionRatified` / `authorize:true` never unlock.
-- **Reconnect MCP** after upgrade: `rinkata_status` counts ≠ tool surface. Missing `rinkata_ratify_decision` / `needs_action` / `decisionId` = stale process.
+- **Reconnect MCP** after upgrade: `rinkata_status` counts ≠ tool surface. Missing `rinkata_accept_decision` / `needs_action` / `decisionId` = stale process.
 
 ## Cross-artifact search / duplicate prevention
 
 **Before create**, call `rinkata_search` with distinctive terms; prefer extending a covering **open** artifact over a parallel one. **Exception:** if a high-score peer is `derivedState: complete`, do **not** extend by stacking — use stop-and-successor (below).
 
-- Create-time `relatedGoals` / `relatedSpecs` / `relatedTickets` is **stop-and-read** (advisory; create still succeeds; `relatedStatus: degraded` + `RELATED_SEARCH_FAILED` is still a successful mint). When `relatedGuidance` is present (complete peers in the hit set), follow stop-and-successor — never stack tickets under those SPECs.
-- Before **approve** or the first **spec-anchored** feature ticket, expect server-recomputed peer set. Use `peerDisposition: { decision: "independent", peerIds, note }` (≥20 char note) only when truly separate; `decision: "fold"` = abandon this duplicate and extend **open** survivors (never fold onto complete). On `PEER_SEARCH_UNAVAILABLE`, retry search — do not invent a disposition (approve/first-feature still refuse).
-- **Agent terminal is the primary disposition surface** (graph-aware search + disposition): after create, read `relatedSpecs` + `dispositionRecommend` / `dispositionGuidance` (fail-open — create still succeeds). Prefer stop-and-extend or successor when recommended; do **not** leave "approve later in Hub" as the plan. On `PEER_DISPOSITION_REQUIRED`, use structured `dispositionRecommend` (confidence + nextStep) and retry **the same tool** with `peerDisposition` in-session. Hub is human backup only — not the agent happy path.
+- Create-time `relatedGoals` / `relatedSpecs` / `relatedTickets` is **stop-and-read** (advisory; create still succeeds, including `relatedStatus: degraded` + `RELATED_SEARCH_FAILED`). When `relatedGuidance` is present, follow stop-and-successor — never stack tickets under those SPECs.
+- First **spec-anchored** feature (create or `plan_from_spec`) uses peer set. Approve has no similar-spec gate. `peerDisposition: { decision: "independent"|"fold", peerIds, note≥20 }`. `independent` only when truly separate; `fold` extends **open** survivors (never complete) and is `PEER_FOLD_REQUIRED` on approve (fold into the peer instead). `independent` and omitted are ignored on approve. `PEER_SEARCH_UNAVAILABLE`: retry; do not invent ids (first feature still refuses).
+- **Agent terminal disposes peers:** after create, read `relatedSpecs` + `dispositionRecommend` / `dispositionGuidance` (fail-open). Prefer stop-and-extend or successor. On `PEER_DISPOSITION_REQUIRED`, retry **the same tool** with `peerDisposition`. Hub is backup only.
 - Goal-section-anchored features (`source:` only) are not disposition-gated in v1 — still search first. Handoffs use `rinkata_list_handoffs({query})`, not `rinkata_search`.
 
-**peerRisk (advisory):** `rinkata_read_spec` / `rinkata_preflight_ticket` may attach `status: clear | peers | degraded` + capped peers with `derivedState` and guidance. Never changes preflight verdict or blocks a read. Use it before hard gates on approve / first feature.
+**peerRisk (advisory):** `rinkata_read_spec` / `rinkata_preflight_ticket` may attach `status: clear | peers | degraded` plus capped peers (`derivedState`, guidance). It does not change the preflight verdict or block a read or approve. Use it before the first-feature gate.
 
-**Complete peers / stop-and-successor:** if a high-score peer has `derivedState: complete`, do **not** extend/fold/soft-stack onto it by stacking feature tickets. Prefer **one official write**. From an idea: `rinkata_promote_idea({ destination: "standalone_spec", predecessor })` — or `create_successor_spec` / `create_standalone_spec` with `originIdeaId` (those seal the idea: `promoted` + `promoted_to` + `promoted_at`). Without an idea: `rinkata_create_successor_spec` (or `create_standalone_spec` + `predecessor`). Or human reopen (`rinkata_approve_completed_spec_reopen`). Do **not** mint a successor then comment on the idea. Re-promote of an origin-linked idea is idempotent (`IDEA_TARGET_EXISTS`) and does not mint a second spec. Server hard-gates refuse create, Goal soft-stack, promote, and `set_ticket_spec` under a covering complete SPEC with `COMPLETED_SPEC_REOPEN_APPROVAL_REQUIRED` + structured recovery (successor or human reopen). Same-call booleans are not authority; agents cannot forge reopen.
+**Completed specs:** adding a feature under a complete spec
+reopens it visibly, recording `reopen_audit` and a history/change-event intent
+`reopen` naming the ticket. An archived spec refuses new work and body/criterion edits, including ticks
+(`SPEC_ARCHIVED`). A person must Restore it to drafting before edits; a
+`decisionId` never unlocks archived content. New ideas or work may reference it.
+A soft-stack beside a complete covering spec still refuses; for a new contract
+prefer a successor. From an idea use `rinkata_promote_idea` with
+`destination: "standalone_spec"` and `predecessor`; without an idea use
+`rinkata_create_successor_spec`. Re-promotion is idempotent (`IDEA_TARGET_EXISTS`);
+never create a successor then comment on the idea. The old reopen approval tool
+is retired (`COMPLETED_SPEC_REOPEN_RETIRED`), not a recovery path.
 
 **Fold (`PEER_FOLD_REQUIRED`):** stop shipping under the duplicate → read `survivingPeerIds` → extend peers → archive/abandon duplicate → continue only under survivors.
 
@@ -199,40 +213,37 @@ After orient, use kind-specific list tools (same filters as Hub Views; CLI: `rin
 
 **Bounded reads:** `rinkata_work_queue`, `rinkata_list_drift`, `rinkata_propose_reconcile`, and `rinkata_propose_staged_reconcile` return at most 25 items in `{ total, returned, offset, truncated }`. If `truncated: true`, page with `offset`/`limit` or filters — never infer "empty / no drift / nothing to reconcile" from one partial page. Staged apply requires a complete action list (`actions.length === summary.totalActions`); re-fetch before handing the plan to a human to apply.
 
-### Phase 2 — Preflight (before starting or completing a ticket)
+### Phase 2 — Advisory preflight and direct ticket operations
 
-1. `rinkata_preflight_ticket(ticketId)` — confirms hashes are fresh, deps satisfied.
-   For a spec-anchored ticket the preflight additionally verifies the spec is
-   `approved` (drafting blocks transitions past `todo`) and the ticket's
-   `source_hash` matches the current spec body.
-   When `knowledgeCovering` is present, read those area docs (`rinkata_knowledge_read`)
-   before inventing context. Knowledge is why / what we learned; the graph is
-   what we committed to build. Covering is advisory — it does not change the
-   preflight verdict.
-2. `STALE_ARTIFACT` / `MISSING_BLOCKER` response = stop and re-issue after
-   re-reading. Never bypass.
-3. **Claim vs Start:** two distinct operations —
-   skills do **not** reimplement parent-fill or sole-branch rules.
-   - **Claim** = take primary ownership (`assignee`) only. Goal / Spec:
-     `rinkata_claim({ kind, id })`. Ticket assignee-only:
-     `rinkata_claim({ kind: "ticket", id, start: false })` (no preflight, no
-     status flip, no parent fill).
-   - **Start** = tickets only. Prefer `/rinkata-ticket-start` or
-     `rinkata_claim({ kind: "ticket", id })` (default `start: true` = official
-     Start / Hub `claim_start`: preflight + assignee + `in_progress` +
-     `started_at`). On success, **report** server `filledParents` only — never
-     invent parent fills or client-write parent assignees.
-   - Bare `rinkata_set_ticket_status(…, in_progress)` for `todo → in_progress` is
-     **refused** with `USE_CLAIM_START` — redirect to official
-     Start (`rinkata_claim` default / `/rinkata-ticket-start`). It is not a
-     fill-if-empty claim path and never parent-fills. Goal/Spec ownership
-     remains claim-only (`rinkata_claim` on those kinds).
-   - Discovery: `rinkata_work_queue` items expose `claimAction`
-     (`claim` | `start` | `none`) — use it to choose Claim vs Start, then call
-     the official tools. Parent fill is **Start-only**; Claim never parent-fills.
-     Ready plan_from_spec mint stubs are `claimAction` none (enrich via
-     `rinkata_write_ticket_body`); do not Start. Official `claim_start` is not
-     stub-gated — ticket-start / nextHop are the ceremony backstop.
+**Claim vs Start:** use `/rinkata-ticket-start` for ownership plus official Start.
+Skills do **not** reimplement parent-fill or sole-branch rules.
+Parent fill is **Start-only**; Claim never parent-fills.
+Ready plan_from_spec mint stubs are `claimAction` none (`claim` | `start` | `none`); enrich before Start.
+
+1. Read `rinkata_preflight_ticket` for alignment, dependencies and optional
+   `knowledgeCovering`; read covering Knowledge before inventing context.
+   Preflight is advisory: stale/unknown alignment, drafting specs and unsatisfied
+   dependencies do not block Start or complete. Surface discrepancies and continue.
+   `TICKET_ALREADY_CLOSED`, a person's `PAUSED`, unreadable requirement truth
+   (`RECOVERY_HOLD`) and `PARENT_NOT_FOUND` (subtasks only) remain server refusals, along with access, attribution and expectedVersion integrity.
+2. `rinkata_update_ticket` requires `expectedVersion` and edits status (`todo`,
+   `in_progress`, `blocked`), title or assignee. Leaving done reopens the ticket
+   and keeps `completed_at` and `completion_evidence`. Only complete sets done;
+   archive and supersede keep their dedicated paths.
+3. `rinkata_claim` takes ownership: `start: false` assigns only; default
+   `start: true` also Starts through the direct update. Goal/spec Claim is
+   assignee-only. Start reports server `filledParents` (kind + id or `[]`);
+   never invent fills or reimplement sole-branch rules. Claim protects another
+   owner's todo/blocked ticket and refuses closed tickets. Use direct update
+   for an authorized Start that keeps the existing owner.
+4. `rinkata_link_requirements` adds/removes links to approved criteria in the
+   ticket's own spec, `realign` moves existing links only, and `acknowledge: true`
+   acknowledges an unlinked ticket at the current requirement state. New tickets
+   under checks-on specs are born acknowledged. Generic saves cannot change
+   these fields. Review changes is not required to realign a ticket.
+5. Enrich plan_from_spec mint stubs with `rinkata_write_ticket_body` before
+   Start (read version, preserve fingerprint + protected regions). Discovery's
+   `claimAction` helps choose Claim or Start; server holds remain authoritative.
 
 ### Readiness / blocker chains — agent-first
 
@@ -248,13 +259,13 @@ Agents already own readiness visibility:
 
 Record ticket waits with `rinkata_update_ticket_dependencies` (add/remove `blocked_by` in one call). Spec `sequence` is recommended order only. Put a Goal or spec in a batch rather than tagging each ticket. Search existing batches (`rinkata_list_batches`) before `rinkata_create_batch` — a close title match returns the existing batch instead of minting.
 
-Hub is for human authority (Accept / Ratify / Retire / Approve),
+Hub is for human authority (Accept / Retire / Approve),
 not a second place to re-learn the DAG. Prefer progressive disclosure in the
 **terminal** (preflight JSON → work_queue page → impact) over new Hub chrome.
 
 ### Phase 3 — Propose (during work)
 
-- Decisions: `rinkata_log_decision` + `affects[]`, agents **`status: "proposed"`**. Covering Goal first, then reference Goals/specs/tickets. On proposed mint, follow `nextAction: "list_needs_action"` (list residual for the human). Lifecycle via `rinkata_update_decision`. **Do not** forge accept/ratify/align apply — human Hub **Accept** / **Ratify** / `rinkata_ratify_decision` only. Judgment edges → proposed DEC on Needs you (not a ticket-only interrupt).
+- Decisions: `rinkata_log_decision` + `affects[]`, agents **`status: "proposed"`**. Covering Goal first, then reference Goals/specs/tickets. On proposed mint, follow `nextAction: "list_needs_action"` (list residual for the human). Lifecycle via `rinkata_update_decision`. **Do not** forge accept/ratify/align apply — human Hub **Accept** / `rinkata_accept_decision` only. Judgment edges → proposed DEC on Needs you (not a ticket-only interrupt).
 - Inbox: `rinkata_inbox_add`.
 - **Create a spec** when a Goal section has ≥3 tickets: `rinkata_extract_spec` / `rinkata spec extract`, then `rinkata spec adopt <id> --accept-all`. Stage-1 CREATE also seeds stubs.
 - **Create tickets under a spec** when one exists: `rinkata_create_ticket` with `spec:` (MCP/UI only). Spec field is authoritative (`implicit-spec-membership` if path-only).
@@ -295,17 +306,17 @@ not a second place to re-learn the DAG. Prefer progressive disclosure in the
   on their own human identity (per-action `approved`). Agent `pak_` keys and
   MCP OAuth are refused with `STAGED_APPLY_HUMAN_REQUIRED` before any write —
   hand the plan over, do not retry. On `RECONCILE_GRAPH_STALE`, re-propose and
-  re-review — never bypass. Decision-driven apply clears `pending_propagation`.
+  re-review — never bypass.
 - **Classic:** hand the plan to a human, who applies it from the Hub UI Fix
   drift drawer or with `rinkata_reconcile_apply` on their own human identity.
   Agent keys and MCP OAuth are refused with `RECONCILE_APPLY_HUMAN_REQUIRED`.
 
-### Phase 5 — Close with evidence (when work has shipped)
+### Phase 5 — Close with optional evidence (when work has shipped)
 
-- `rinkata_complete_ticket(ticketId, evidence)` (CLI: `rinkata complete`) — never hand-edit `status: done` / `completed_at` / `completion_evidence`. Stale source → reconcile first. Evidence: PR URL, commit sha, smoke steps; tool appends protected `### Completion`. Optional `knowledgeWriteBack: { body, title?, areaId?, documentId?, heading?, mode? }` records what we now know: mint a note in an existing area or Unfiled, or amend a listed document (`documentId` + `append`|`replace`|`new_heading`|`replace_document`). `mode=replace_document` (or heading-less `mode=replace`) replaces the whole stored markdown; heading-ful `replace` still needs a heading; `append` / `new_heading` stay additive. Best-effort — Complete still succeeds if ingest fails. Prefer a covering doc over a parallel `What we learned — TICK-X` note. Or call `rinkata_knowledge_record` after Complete. Agents cannot mint areas or invent a document id.
+- `rinkata_complete_ticket(ticketId, evidence?)` (CLI: `rinkata complete`) — never hand-edit `status: done` / `completed_at` / `completion_evidence`. Evidence is optional; attach a real PR URL, commit sha or smoke steps when available. `no_evidence`, `out_of_date`, `spec_not_approved` and `alignment_unknown` are warnings; `TICKET_ALREADY_CLOSED`, `PAUSED`, `RECOVERY_HOLD` and `PARENT_NOT_FOUND` (subtasks only) still refuse. The tool appends protected `### Completion`. Optional `knowledgeWriteBack` records what we now know (`body`; `title` + existing `areaId` to mint, or `documentId` + `heading`/`mode` to amend). Prefer a covering doc; agents cannot mint areas or invent a document id.
 - **Real proof:** for feature tickets with a Complete panel, attach structured evidence:
   - Tests: `rinkata demo propose <SPEC-ID> --tests <report.json>` (Vitest/Jest `--reporter=json` → pass/fail rows).
-  - Screenshots: prefer `rinkata_upload_demo_screenshot({ contentBase64, label })` (Hub MCP; same caps as the HTTP route), then pass only the returned Hub URL to `rinkata_complete_ticket` `screenshots[]` or `rinkata_propose_demo_evidence({ specId, type: "screenshot", url })`. Capture at a viewport of at least 1440×900 with deviceScaleFactor: 2. Hub hard-refuses smaller or soft/mushy bitmaps before store (`SCREENSHOT_TOO_SMALL` / `SCREENSHOT_TOO_SOFT`). Do not re-shot a Complete tile. Upload max is 8 MiB / 40 million pixels. Tiles render in spec/ticket drawers, not on Complete cards. When FE/UI work produced walkthrough captures (e.g. Cursor Cloud screenshot captures), upload those bytes. Review each capture before upload: do not upload one that shows secrets, credentials, tokens, or personal/customer data — recapture with test data or crop it first. A Cursor agent artifact page is auth-gated HTML. It is stored as type url, not a tile. Hub remains valid with an OAuth session.
+  - Screenshots: never paste image bytes or base64. Default path is `rinkata_begin_demo_screenshot_upload({ projectId, contentType, byteLength, sha256?, label })` → `curl -fsS -X PUT --upload-file ./shot.webp -H "Content-Type: image/webp" -H "X-Rinkata-Upload-Token: $TOKEN" "$UPLOAD_URL"` → `rinkata_finalize_demo_screenshot_upload({ projectId, uploadId })` → pass only the returned Hub URL to `rinkata_complete_ticket` `screenshots[]` or `rinkata_propose_demo_evidence({ specId, type: "screenshot", url })`. Capture ≥1440×900 at deviceScaleFactor 2. Hub refuses smaller/soft bitmaps (`SCREENSHOT_TOO_SMALL` / `SCREENSHOT_TOO_SOFT`). Max 8 MiB / 40M pixels. Tiles live in spec/ticket drawers, not Complete cards. PUT files from disk (e.g. Cursor Cloud screenshot captures); do not upload one that shows secrets, credentials, tokens, or personal/customer data — recapture with test data or crop it first. A Cursor artifact page is auth-gated HTML (type url, not a tile). Legacy `rinkata_upload_demo_screenshot({ contentBase64, label })` is small-images-only. Hub still works with a session/API key.
   Both land as accepted evidence immediately. Optional pack-level human verdict is non-blocking attestation — rinkata records, does not gate shipping.
 
 ## Session-scoped completion conditions (ticket as goal)
@@ -313,7 +324,7 @@ not a second place to re-learn the DAG. Prefer progressive disclosure in the
 Evaluators judge the **transcript** only (no disk). Pattern:
 
 1. Quote `rinkata_read_ticket` (+ `rinkata_read_spec` if `spec:`) acceptance into the transcript first.
-2. Goal signals: quoted criteria; `rinkata_preflight_ticket` / `preflight --json` → `"status": "safe"` (JSON, not text banner); `rinkata_complete_ticket` succeeded; `rinkata doctor: OK`; turn cap.
+2. Goal signals: quoted criteria; advisory `rinkata_preflight_ticket` discrepancies (JSON, not text banner); `rinkata_complete_ticket` succeeded; `rinkata doctor: OK`; turn cap.
 3. Surface test/preflight/complete outputs each turn so the evaluator can stop.
 
 Claude Code: `/rinkata-ticket-goal <id>`. Others: same pattern via host goal/evaluator. Planned: `rinkata_ticket_goal_brief`.
@@ -331,7 +342,7 @@ First-class artifact (`HANDOFF-*`) outside the alignment graph (no `source_hash`
 
 ## Agentic-specific patterns (optional)
 
-- **Preflight subagent:** call `rinkata_preflight_ticket`; if not `safe`, stop with blocker + JSON.
+- **Preflight subagent:** call `rinkata_preflight_ticket`; surface discrepancies + JSON; only server holds refuse Start/complete.
 - **Readiness shape:** if preflight is blocked or the user asks "what's blocking work?", use
   `rinkata_work_queue` + optional `rinkata_impact` + `rinkata_doctor` — not Hub UI.
 - **Long work:** handoff checkpoints; background tests; resume via `rinkata_read_handoff({ latest: true, about })`.
@@ -366,7 +377,7 @@ human identity.
 - **ABSORB** bumps `source_hash` without body change (typo fixes; prevents ticket churn). Stage-1 ABSORB ⇒ stage 2 usually no-op. **After tickets already have file-level plans and the spec moved, default the proposed verb to ABSORB.** UPDATE only when a ticket body is actually wrong. Do not default to UPDATE that appends useless “Upstream” notes. Apply remains human-gated.
 - **DEFER** = noticed, no hash bump. **UPDATE** needs `bodyRevision` after `rinkata_write_spec_body`. **CREATE** seeds minimal Hub spec stub. **ARCHIVE** → `rinkata_archive_spec` + explicit downstream.
 - Apply: `RECONCILE_GRAPH_STALE` if graph moved — re-propose, never bypass.
-- Decision-driven apply (after `rinkata_propose_from_decision`) clears `pending_propagation` server-side.
+- Decision-driven apply (after `rinkata_propose_from_decision`) clears `pending_propagation` once no decision work is left.
 
 ## Hub-Only Mode
 
@@ -385,15 +396,15 @@ idea, inbox, decision, reconcile, or handoff files.
 ## Failure modes
 
 - Tools missing → Hub MCP isn't connected, or the OAuth session is stale. Reconnect Hub MCP so the OAuth session is current
-  so new tools (`rinkata_ratify_decision`, `rinkata_knowledge_list` /
+  so new tools (`rinkata_accept_decision`, `rinkata_knowledge_list` /
   `read` / `ask` / `record` / `upload`, `needs_action`, `decisionId` on writes) appear.
   Non-zero `rinkata_status` counts only prove the data path.
 - `STALE_ARTIFACT` errors → re-read project state, re-issue. Never edit hashes
   manually.
 - Drift after reconcile apply → run `rinkata_doctor`, share output with user.
 - `RATIFY_FORGE_REFUSED` / `RATIFY_HUMAN_REQUIRED` → agents cannot stamp
-  ratify; ask a human to use Hub Ratify or a human-session
-  `rinkata_ratify_decision`.
+  ratify; ask a human to use Hub **Accept** or a human-session
+  `rinkata_accept_decision` (human session only; agents get RATIFY_HUMAN_REQUIRED).
 - `SUCCESSOR_REQUIRED` on a SPEC write → stop-and-successor, or retry with
   `decisionId` of a **human-ratified** governing DEC (dual unlock); never
   same-call `authorize:true`.
