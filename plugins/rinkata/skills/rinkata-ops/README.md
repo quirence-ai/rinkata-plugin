@@ -13,7 +13,7 @@ Encodes rinkata's agent rules — the same rules in host agent rule files — as
 
 ## What it teaches
 
-- Use the rinkata MCP tools (`rinkata_status`, `rinkata_preflight_ticket`,...) for Hub artifact reads and writes
+- Use the rinkata MCP tools (`rinkata_status`, `rinkata_preflight_ticket`, ...) for Hub artifact reads and writes
 - Never read or write repo-local rinkata artifact directories
 - Read advisory preflight before ticket work; alignment drift is a discrepancy, while a stale expectedVersion is a write conflict
 - **Claim vs Start** are distinct: Claim is assignee-only; Start is ticket official

@@ -86,7 +86,7 @@ At startup, call `requireTools(["rinkata_preflight_ticket", "rinkata_read_ticket
    re-shot a Complete tile. Upload max is 8 MiB / 40 million pixels.
    Review each capture before upload: do not upload one that shows secrets, credentials, tokens, or personal/customer data — recapture with test data or crop it first. Upload each with
    `rinkata_begin_demo_screenshot_upload({ projectId, contentType, byteLength, sha256?, label })`,
-   then `curl -fsS -X PUT --upload-file./shot.webp` using the returned `uploadUrl` and
+   then `curl -fsS -X PUT --upload-file ./shot.webp` using the returned `uploadUrl` and
    `X-Rinkata-Upload-Token` (never paste image bytes into a tool call), then
    `rinkata_finalize_demo_screenshot_upload({ projectId, uploadId })`, and pass only
    the returned Hub URL in `screenshots[]`. Tiles render in spec/ticket

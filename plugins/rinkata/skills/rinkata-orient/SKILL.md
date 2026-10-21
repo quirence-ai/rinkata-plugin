@@ -70,7 +70,7 @@ Apply in this order; first match wins:
 | 1 | Doctor has any `error` checks (`severity === "error"`) | Run `rinkata doctor` (CLI) or call `rinkata_doctor` again; fix the named errors before starting any other work. |
 | 2 | `counts.invalid > 0` | Schema-invalid artifacts need repair. Inspect `value.tickets[]` filtered by `status: "invalid"`. Repair before continuing. |
 | 3 | `counts.reconciles > 0` (open reconcile plans awaiting apply) | Report the open reconcile plans as context; a person may review/apply them. They do not gate Start or complete. |
-| 4 | `counts.unknown > 0` (ticket points at a missing Goal section / spec) | Unknown sources are advisory; Start is allowed unless a server hold refuses. Surface the unknown ticket ids; suggest re-attaching them to a covering spec via `rinkata_archive_spec... downstream: migrate` or detaching to a valid Goal section. |
+| 4 | `counts.unknown > 0` (ticket points at a missing Goal section / spec) | Unknown sources are advisory; Start is allowed unless a server hold refuses. Surface the unknown ticket ids; suggest re-attaching them to a covering spec via `rinkata_archive_spec ... downstream: migrate` or detaching to a valid Goal section. |
 | 5 | `counts.stale > 0` | "Drift on N tickets. Run `/rinkata-reconcile <target>` on the most stale source, then re-orient." (Pick the spec or Goal that the most stale tickets share.) |
 | 6 | `counts.specsInFlight > 0` AND any spec is `drafting` with member tickets | "Spec `<id>` is drafting; its member tickets can Start. Approve the contract when ready." |
 | 7 | `counts.inbox > 0` AND none of 1-6 apply | "N inbox notes uncaptured. Triage with `/rinkata-decide` to promote each to a decision / ticket / Goal edit before starting new work." |
