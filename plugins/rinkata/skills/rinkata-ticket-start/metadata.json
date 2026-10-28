@@ -1,12 +1,12 @@
 {
   "name": "rinkata-ticket-start",
-  "description": "Advisory preflight + context pack + ownership through rinkata_claim. Reports server filledParents without client parent-fill; drafting and alignment drift do not gate Start.",
+  "description": "Advisory preflight + context pack + ownership through rinkata_claim. Reports server filledParents without client parent-fill; drafting and alignment drift do not gate Start. Binds the host session to the ticket before Start for measured token usage.",
   "category": "skills",
   "author": {
     "name": "Quirence",
     "github": "quirence-ai"
   },
-  "version": "0.3.2",
+  "version": "0.5.1",
   "requires": {
     "services": [],
     "tools": [
@@ -22,5 +22,5 @@
   "difficulty": "beginner",
   "estimated_time": "auto-loaded",
   "created": "2026-05-15",
-  "updated": "2026-08-23"
+  "updated": "2026-10-28"
 }
