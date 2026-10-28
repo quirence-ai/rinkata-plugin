@@ -1,6 +1,6 @@
 ---
 name: rinkata-reconcile
-version: 0.2.10
+version: 0.2.11
 description: 'Review and update out-of-date work between Goals, specs, and tickets. Uses rinkata reconcile tools to propose reviewable plans, hands each plan to a human to apply, and treats stale graphs as blockers. Default path for out-of-date Goal/Spec work is staged propose then human apply (not Hub-only). Not for drift findings (Hub: mismatches).'
 triggers:
   - /rinkata-reconcile
@@ -123,7 +123,8 @@ unapproved for a person. Classic `rinkata_reconcile_apply` stays person-only.
 - **Decision-driven:** `rinkata_propose_from_decision` → human review → a human
   (or an agent that wrote every version of the accepted Decision, or logged or accepted it while in effect and only agents wrote it) runs `rinkata_apply_staged_reconcile` (clears `pending_propagation` once no decision work is left).
 - Refusal cases: nothing out of date, missing tools, Hub unreachable, stale graph,
-  truncated plan page, no human approval all stop before apply.
+  truncated plan page, an unapproved row, and an agent outside the Human-only
+  apply exception all stop before apply.
 - Protected human notes must be preserved verbatim; if a plan would rewrite
   protected prose, surface that as a blocker rather than applying it.
 - After tickets already have file-level plans, prefer proposing ABSORB over

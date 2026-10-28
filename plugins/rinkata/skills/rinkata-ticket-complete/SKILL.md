@@ -1,6 +1,6 @@
 ---
 name: rinkata-ticket-complete
-version: 0.1.17
+version: 0.1.18
 description: 'Close a rinkata ticket with optional evidence. Reads advisory preflight, then calls rinkata_complete_ticket so status, completed_at, completion_evidence, and the protected Completion block are written by the tool. Load mid-session without a slash when the work has shipped (rinkata_complete_ticket) or the user wants only to record what we now know (rinkata_knowledge_record; do not complete).'
 triggers:
   - /rinkata-ticket-complete
@@ -19,6 +19,9 @@ tools:
   - rinkata_knowledge_list
   - rinkata_knowledge_read
   - rinkata_knowledge_record
+  - rinkata_knowledge_create_area
+  - rinkata_list_drift_findings
+  - rinkata_resolve_drift
 mutating: true
 argument-hint: <ticket-id> [--evidence <evidence>]
 metadata:
@@ -98,17 +101,31 @@ At startup, call `requireTools(["rinkata_preflight_ticket", "rinkata_read_ticket
    write-back. Pass
    `knowledgeWriteBack: { body, title?, areaId?, documentId?, heading?, mode? }`
    when something belongs in Knowledge, or `{ noChange: true, reason }` when
-   nothing does; omit records an explicit no-change. Prefer `documentId` +
+   nothing does. Always pass one of the two. Omitting it is stored as a
+   no-change with a placeholder reason ("caller omitted knowledgeWriteBack"):
+   that is a skipped decision, not a write-back. Prefer `documentId` +
    `heading`/`mode` (`append`|`replace`|`new_heading`|`replace_document`) when
    preflight `knowledgeCovering` lists a feature doc — do not mint a parallel
    `What we learned — TICK-X` note. Use `mode=replace_document` (or heading-less
    `mode=replace`) for a whole-document repair; heading-ful `replace` still needs
-   a heading. `areaId` must already exist; omit for Unfiled.
+   a heading. `areaId` must already exist (`rinkata_knowledge_create_area`
+   returns one); omit for Unfiled.
    Write-back is best-effort — Complete still succeeds if ingest fails
    (`GEMINI_NOT_CONFIGURED`); failures are recorded for retry. Do not invent a
    new area or document id. Two-way linkage is stored (`knowledge_writebacks`).
    After the fact, `rinkata_knowledge_record` is the same write path.
-7. Render the returned completion evidence and tell the user to run
+7. **Drift findings** (Hub: mismatches; not `rinkata_list_drift`). Complete
+   runs a best-effort drift check. Call
+   `rinkata_list_drift_findings({ status: "open" })` and judge each open
+   finding on this ticket or its spec / Goal chain. Resolve it with
+   `rinkata_resolve_drift` and a `cause`: `bug_ticket` (`parent`: an active
+   spec or Goal section), `superseding_decision` (`supersedes`: the stale
+   Decision; own `title` required), or `safer_option` (`choice` + `flagFor`: a
+   project person). Never reopen completed work: the bug goes under active work
+   and names the completed item in `discovered_from`; else
+   `DRIFT_PARENT_NOT_ACTIVE`. When unsure, take `safer_option` and flag a
+   project person.
+8. Render the returned completion evidence and tell the user to run
    `/rinkata-status-report` or `rinkata doctor` if they want a final health check.
 
 ## Server-side contract
@@ -124,7 +141,8 @@ An agent reports completion and attaches evidence; only a person verifies it.
 ## Behavioral test contract
 
 - Tool sequence: `requireTools` → `rinkata_preflight_ticket` → `rinkata_read_ticket`
-  → optional `rinkata_read_spec` → `rinkata_complete_ticket`.
+  → optional `rinkata_read_spec` → `rinkata_complete_ticket` →
+  `rinkata_list_drift_findings` → `rinkata_resolve_drift` per open finding.
 - Tool sequence (knowledge-only): `requireTools` → `rinkata_read_ticket` →
   `rinkata_knowledge_list` → optional `rinkata_knowledge_read` →
   `rinkata_knowledge_record` (`documentId` when a covering doc is listed).
