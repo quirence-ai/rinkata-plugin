@@ -1,7 +1,7 @@
 ---
 name: rinkata-ticket-start
-version: 0.3.2
-description: 'The "I’m picking up TICK-X" entry point for any rinkata-backed project. Runs preflight on the ticket, reports advisory alignment and dependency discrepancies, surfaces the ticket body + spec acceptance criteria into the transcript so the agent has context BEFORE working, then claims the ticket — assigns it to the caller and transitions it todo → in_progress in one call via rinkata_claim (official Start). After a successful Start, always reports server `filledParents` (print kind+id entries, or state that the array is empty — never invents fills). Use this skill when an engineer or AI agent is about to start work on a specific ticket — typically right after /rinkata-orient suggests one. /rinkata-orient answers "what should I work on"; /rinkata-ticket-start claims the chosen ticket and packs its context. Also load mid-session without a slash when the user is picking up, starting, or claiming a ticket (claim vs start: rinkata_claim start:false vs default start:true). Mutating: this skill flips ticket status. It never flips status as a side effect of any other action — only on its own explicit invocation.'
+version: 0.5.0
+description: 'The "I’m picking up TICK-X" entry point for any rinkata-backed project. Runs preflight on the ticket, reports advisory alignment and dependency discrepancies, surfaces the ticket body + spec acceptance criteria into the transcript so the agent has context BEFORE working, then claims the ticket — assigns it to the caller and transitions it todo → in_progress in one call via rinkata_claim (official Start). Just before the Start it binds the host session to the ticket (rinkata_bind_usage_session), so its measured token usage counts from the start of the work; a resumed in_progress ticket gets the bind alone. After a successful Start, always reports server `filledParents` (print kind+id entries, or state that the array is empty — never invents fills). Use this skill when an engineer or AI agent is about to start work on a specific ticket — typically right after /rinkata-orient suggests one. /rinkata-orient answers "what should I work on"; /rinkata-ticket-start claims the chosen ticket and packs its context. Also load mid-session without a slash when the user is picking up, starting, or claiming a ticket (claim vs start: rinkata_claim start:false vs default start:true). Mutating: this skill flips ticket status. It never flips status as a side effect of any other action — only on its own explicit invocation.'
 triggers:
   - /rinkata-ticket-start
   - "start ticket TICK-"
@@ -18,6 +18,7 @@ tools:
   - rinkata_claim
   - rinkata_knowledge_read
   - rinkata_write_ticket_body
+  - rinkata_bind_usage_session
 mutating: true
 argument-hint: <ticket-id>
 metadata:
@@ -37,10 +38,11 @@ transitions its status to `in_progress` in one call via `rinkata_claim`.
 
 Perf budget: the calls run **sequentially** — advisory preflight first, then
 `rinkata_read_ticket`, then `rinkata_read_spec` (only if the ticket is spec-anchored),
-then `rinkata_claim` (only if a start happens). Worst case is **4 Hub MCP
+then `rinkata_bind_usage_session` (just before a Start, or alone on an already
+`in_progress` ticket), then `rinkata_claim` (only if a start happens). Worst case is **5 Hub MCP
 round-trips**: a spec-anchored ticket that starts (preflight + 2 reads + the
-claim). A no-spec ticket that starts is 3; a run a pre-flip guard short-circuits
-is fewer. `rinkata_claim` folds the assignment and the `todo → in_progress` flip
+bind + the claim). A no-spec ticket that starts is 4; a run a pre-flip guard short-circuits
+is fewer. A Start the server refuses after a bind adds one bind or unbind. `rinkata_claim` folds the assignment and the `todo → in_progress` flip
 into a single write, so claiming does not add a round-trip over the old
 status-only flip. The skill reads sequentially for simplicity — preflight's
 `source` field does expose the spec path, so a later optimization could derive
@@ -124,7 +126,8 @@ projects
      stub. Unassigned stubs still take the mint-stub enrich guard after
      lifecycle.
    - **Start + `done` or `archived`** → skip, surface "ticket is `<status>`;
-     reopen it explicitly with `rinkata_update_ticket` if that is intended."
+     reopen it explicitly (bind first, then `rinkata_update_ticket`) if that
+     is intended."
      Never silently reopen a closed ticket. **Do NOT call `rinkata_claim`.**
      **Do NOT call `rinkata_write_ticket_body`.** Lifecycle before enrich:
      `write_ticket_body` permits rewrites on closed tickets, and a completed
@@ -134,7 +137,8 @@ projects
      status change", succeed. The skill doubles as a mid-session "re-surface my
      ticket context" tool. **Do NOT call `rinkata_claim` here** — a Start
      claim on an already-started ticket would reassign it. **Do NOT enrich**
-     an in_progress stub either (lifecycle before enrich).
+     an in_progress stub either (lifecycle before enrich). Make the **bind
+     only** (step 7): this session is resuming the ticket.
    - **Start + mint stub** → STOP, do NOT Start. Only for
      `todo` tickets — the lifecycle guards above already skipped `done` /
      `archived` / `in_progress`. A completed stub still looks like a stub:
@@ -145,7 +149,8 @@ projects
      `rinkata_write_ticket_body` with `expectedVersion` from the read, keeping
      fingerprint + protected regions, no secrets. Then re-run this skill.
      Skip this guard when the body is already a non-stub.
-   - **Start otherwise** — call `rinkata_claim({projectId, kind: "ticket", id: ticketId})`
+   - **Start otherwise** — bind the session first (step 7), then call
+     `rinkata_claim({projectId, kind: "ticket", id: ticketId})`
      (default `start: true`) for ownership plus Start. A drafting spec and drift
      are discrepancies; the server decides whether a hold refuses the write.
      `rinkata_update_ticket` is the direct operation for Start without taking
@@ -188,8 +193,40 @@ projects
      call; there is no success payload with `started`/`filledParents`.
      Surface the error code/message and stop; do not invent assignment or
      parent-fill outcomes.
+     The session was bound just before this call (step 7). If the bind
+     succeeded and the Start then errors, use the bind's `previousTicketId`:
+     when it equals this ticket, do nothing; when it names another ticket,
+     bind that ticket again; when it is null, unbind
+     (`rinkata_bind_usage_session({ projectId, ticketId: null })`). Never
+     rebind from memory or a guess. Then this session's usage does not count
+     for a ticket it did not start, and the earlier ticket keeps counting.
 
-7. **Branch creation is opt-in.** Default: do nothing. Only if the user
+7. **Bind the session.** Bind **before** the Start: on the Start path, call it right before `rinkata_claim`;
+   on the already-`in_progress` branch, call it alone. Call
+   `rinkata_bind_usage_session({ projectId, ticketId })` once, so this host
+   session's measured token usage counts for the ticket from now. The bind
+   needs no Start, so its interval is already open when the work cycle
+   begins. A bind after the Start leaves the usage in between counted for no
+   ticket, and the ticket's usage reads `partial` with a coverage gap. Keep
+   the result's `previousTicketId` (the ticket the session was bound to just
+   before, or null): step 6 needs it if the Start is refused. Pass only
+   the ticket: the host adapter supplies `host` and `hostSessionId` (the stdio
+   MCP server reads them from the host's env, or a host hook passes them).
+   Never pass a guessed session id. The bind never claims, starts, reassigns
+   or reopens, so it is the one write on the in_progress branch. Claim-only,
+   `done` / `archived` and mint-stub runs do not bind.
+   - **A bind refusal never stops the Start.** Report it and call
+     `rinkata_claim` as planned.
+   - **Refused `USAGE_SESSION_UNKNOWN`** → report "usage not bound: this host
+     supplied no session id" in one line and go on. It refuses only the bind,
+     never the ticket work. Do **not** retry, and never retry with a guessed id.
+   - Any other bind error, or a missing tool on an older MCP server: report it
+     in one line and go on. Usage shows a coverage gap; nothing else changes.
+   - **Reopen or switch:** to reopen, bind the ticket first, then reopen it
+     through `rinkata_update_ticket`. When the session moves to another
+     ticket, call `rinkata_bind_usage_session` for that ticket, the same way.
+
+8. **Branch creation is opt-in.** Default: do nothing. Only if the user
    explicitly asks for a branch, suggest `git checkout -b <suggested-branch>`.
    This skill does not run git itself.
 
@@ -200,6 +237,7 @@ The implementation and tests for this skill must cover these paths:
 - **Happy path** — `rinkata_preflight_ticket` returns `status: "safe"`;
   `rinkata_read_ticket` renders the ticket body; a spec-anchored ticket then calls
   `rinkata_read_spec`; the context pack is visible before any `rinkata_claim` call,
+  the usage bind runs right before the claim,
   and the claim both assigns the ticket to the caller and advances it to
   `in_progress`. After a successful Start (`started: true`), the skill prints
   server `filledParents` (list of kind+id, or explicit empty `[]`) without
@@ -226,6 +264,16 @@ The implementation and tests for this skill must cover these paths:
 - **filledParents reporting path** — official Start response is the only
   authority for parent fills; skill never reimplements sole-branch / parent-fill
   rules and never client-writes parent assignees.
+- **Usage bind path** — per the skill binds
+  before the Start: `rinkata_bind_usage_session` with the ticket id only, then
+  `rinkata_claim`, so the work cycle is covered from its start. On an already
+  `in_progress` ticket it binds alone (no claim, no enrich). A bind refusal
+  (`USAGE_SESSION_UNKNOWN` or any other) is reported in one line and the
+  Start goes on; it is never retried with a guessed id. A Start error after a
+  successful bind uses the bind's `previousTicketId`: this ticket, nothing;
+  another ticket, bind it again; null, unbind (`ticketId: null`). Never from
+  memory or a guess. A reopen binds, then reopens.
+  Claim-only, `done` / `archived` and mint-stub runs do not bind.
 
 Linked decisions are opportunistic only today: if the active MCP surface
 or ticket payload exposes explicit decision links, render them in the context
@@ -245,7 +293,7 @@ Deterministic slug from the ticket id + title:
 
 ## Capability check
 
-At startup, call `requireTools(["rinkata_preflight_ticket", "rinkata_read_ticket", "rinkata_read_spec", "rinkata_claim", "rinkata_write_ticket_body"])` against the active MCP surface. If any tool is missing, render the returned parity-gap message, including any note id or alternate surface, and stop before preflight. `rinkata_claim` is Hub-backed. `rinkata_read_ticket` is Hub-only, so the skill still requires the Hub surface overall. `rinkata_write_ticket_body` is the backstop when the ticket is still a mint stub. If a direct tool call still returns `Method not found`, surface:
+At startup, call `requireTools(["rinkata_preflight_ticket", "rinkata_read_ticket", "rinkata_read_spec", "rinkata_claim", "rinkata_write_ticket_body"])` against the active MCP surface. If any tool is missing, render the returned parity-gap message, including any note id or alternate surface, and stop before preflight. `rinkata_claim` is Hub-backed. `rinkata_read_ticket` is Hub-only, so the skill still requires the Hub surface overall. `rinkata_write_ticket_body` is the backstop when the ticket is still a mint stub. `rinkata_bind_usage_session` is deliberately not required: when it is missing, skip the bind (step 7) and say so in one line. If a direct tool call still returns `Method not found`, surface:
 
 > Tool `<name>` is not available on the active MCP surface. `/rinkata-ticket-start`
 > needs Hub MCP — `rinkata_read_ticket` is Hub-only (`rinkata_read_spec` and

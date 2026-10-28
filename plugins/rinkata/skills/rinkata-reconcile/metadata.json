@@ -6,7 +6,7 @@
     "name": "Quirence",
     "github": "quirence-ai"
   },
-  "version": "0.2.8",
+  "version": "0.2.10",
   "requires": {
     "services": [],
     "tools": [

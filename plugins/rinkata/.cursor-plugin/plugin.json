@@ -1,7 +1,7 @@
 {
   "name": "rinkata",
   "displayName": "Rinkata",
-  "version": "0.9.0",
+  "version": "0.9.12",
   "description": "Keep your AI agents aligned with what you decided to build. Rinkata holds your Goals, specs, tickets, and decisions, and flags when code work drifts from them. It connects over MCP with OAuth, so there are no keys to paste.",
   "author": {
     "name": "Quirence",

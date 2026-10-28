@@ -2,7 +2,7 @@
 
 Cursor plugin for [rinkata](https://rinkata.dev) by Quirence. Hub source-of-truth skills plus MCP.
 
-Version: `0.9.0`
+Version: `0.9.12`
 
 ## Install
 
